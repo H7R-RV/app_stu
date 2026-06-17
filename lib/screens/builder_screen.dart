@@ -265,11 +265,11 @@ class _PaperScroll extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.touch_app, color: Colors.white70, size: 40),
+          Icon(Icons.touch_app, color: Colors.grey.shade600, size: 40),
           const SizedBox(height: 8),
-          const Text('Drag questions from the library,\nor tap + to add one',
+          Text('Drag questions from the library,\nor tap + to add one',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70)),
+              style: TextStyle(color: Colors.grey.shade700)),
         ],
       ).animate(onPlay: (c) => c.repeat(reverse: true)).fadeIn().moveY(
           begin: 0, end: -6, duration: 1200.ms, curve: Curves.easeInOut),

@@ -96,6 +96,25 @@ class _QuestionEditorState extends State<QuestionEditor> {
   // ---- MCQ -----------------------------------------------------------------
   List<Widget> _mcqFields() {
     return [
+      const Text('Option layout',
+          style: TextStyle(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 8,
+        children: [
+          for (final l in McqLayout.values)
+            ChoiceChip(
+              avatar: Icon(l.icon, size: 16),
+              label: Text(l.label),
+              selected: q.mcqLayout == l,
+              onSelected: (_) {
+                q.mcqLayout = l;
+                _refresh();
+              },
+            ),
+        ],
+      ),
+      const Divider(height: 24),
       const Text('Options (select the correct one)',
           style: TextStyle(fontWeight: FontWeight.bold)),
       const SizedBox(height: 8),

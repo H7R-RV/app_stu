@@ -20,7 +20,7 @@ extension HeaderTemplateInfo on HeaderTemplate {
 
 /// All the toggles and style choices for the editable header.
 class HeaderConfig {
-  HeaderTemplate template = HeaderTemplate.modern;
+  HeaderTemplate template = HeaderTemplate.classic;
 
   bool showLogo = true;
   bool showSchool = true;

@@ -86,10 +86,21 @@ class DocxExporter {
     final b = StringBuffer();
     switch (q.type) {
       case QuestionType.mcq:
-        for (var i = 0; i < q.options.length; i++) {
+        String opt(int i) =>
+            '(${String.fromCharCode(65 + i)})  ${q.options[i]}';
+        if (q.mcqLayout == McqLayout.row) {
           b.write(_para(
-              '(${String.fromCharCode(65 + i)})  ${q.options[i]}',
+              [for (var i = 0; i < q.options.length; i++) opt(i)].join('     '),
               size: 22, indent: 360));
+        } else if (q.mcqLayout == McqLayout.twoColumn) {
+          for (var i = 0; i < q.options.length; i += 2) {
+            final right = i + 1 < q.options.length ? '\t\t${opt(i + 1)}' : '';
+            b.write(_para('${opt(i)}$right', size: 22, indent: 360));
+          }
+        } else {
+          for (var i = 0; i < q.options.length; i++) {
+            b.write(_para(opt(i), size: 22, indent: 360));
+          }
         }
         break;
       case QuestionType.trueFalse:

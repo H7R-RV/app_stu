@@ -6,7 +6,18 @@ import '../state/app_state.dart';
 import 'inline_text_field.dart';
 import 'page_layout.dart';
 
-/// A question rendered directly on the page with every text inline-editable.
+/// Document text colour and base style so the page reads like printed paper.
+const Color _ink = Color(0xFF111111);
+const TextStyle _bodyStyle =
+    TextStyle(fontSize: LayoutConst.bodyFont, color: _ink, height: 1.25);
+const TextStyle _qStyle = TextStyle(
+    fontSize: LayoutConst.bodyFont + 0.5,
+    color: _ink,
+    fontWeight: FontWeight.w600,
+    height: 1.3);
+
+/// A question rendered like printed paper. Tap it to reveal editing controls;
+/// every text is editable in place.
 class EditableQuestion extends StatelessWidget {
   const EditableQuestion({
     super.key,
@@ -29,216 +40,308 @@ class EditableQuestion extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.read<AppState>();
     final rev = context.select<AppState, int>((s) => s.revision);
+    final selected = context.select<AppState, bool>(
+        (s) => s.selectedId == question.id);
     final q = question;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.fromLTRB(6, 6, 4, 6),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade200),
-        color: Colors.white,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Focus(
+      onFocusChange: (has) {
+        if (has) state.select(q.id);
+      },
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => state.select(q.id),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          margin: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.fromLTRB(6, 4, 4, 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            color: selected ? accent.withOpacity(0.06) : Colors.transparent,
+            border: Border(
+              left: BorderSide(
+                color: selected ? accent : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 11,
-                backgroundColor: accent,
-                child: Text('$number',
-                    style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold)),
+              if (selected) _toolbar(state),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2, right: 4),
+                    child: Text('Q$number.',
+                        style: _qStyle.copyWith(fontWeight: FontWeight.bold)),
+                  ),
+                  Expanded(
+                    child: InlineTextField(
+                      key: ValueKey('q_${q.id}_$rev'),
+                      initial: q.text,
+                      hint: 'Type the question...',
+                      style: _qStyle,
+                      maxLines: null,
+                      onChanged: (v) => q.text = v,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6, top: 2),
+                    child: Text('( ${q.marks} )',
+                        style: _qStyle.copyWith(fontWeight: FontWeight.bold)),
+                  ),
+                ],
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: InlineTextField(
-                  key: ValueKey('q_${q.id}_$rev'),
-                  initial: q.text,
-                  hint: 'Type the question...',
-                  style: const TextStyle(
-                      fontSize: LayoutConst.bodyFont + 0.5,
-                      fontWeight: FontWeight.w600),
-                  maxLines: null,
-                  onChanged: (v) => q.text = v,
-                ),
+              Padding(
+                padding: const EdgeInsets.only(left: 22, top: 2),
+                child: _body(context, state, rev, selected),
               ),
-              _MarksChip(question: q, accent: accent),
-              _actions(state),
             ],
           ),
-          Padding(
-            padding: const EdgeInsets.only(left: 28, top: 2),
-            child: _body(context, state, rev),
+        ),
+      ),
+    );
+  }
+
+  Widget _toolbar(AppState state) {
+    final q = question;
+    Widget btn(IconData icon, String tip, VoidCallback onTap, {Color? color}) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Tooltip(
+            message: tip,
+            child: Icon(icon, size: 17, color: color ?? Colors.grey.shade700),
           ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        children: [
+          if (q.type == QuestionType.mcq)
+            btn(q.mcqLayout.icon, 'Options: ${q.mcqLayout.label}',
+                () => state.cycleMcqLayout(q), color: accent),
+          const Spacer(),
+          btn(Icons.tune, 'Advanced edit', onSettings),
+          btn(Icons.copy, 'Duplicate', onDuplicate),
+          btn(Icons.delete_outline, 'Delete', onDelete, color: Colors.red),
         ],
       ),
     );
   }
 
-  Widget _actions(AppState state) {
-    return PopupMenuButton<String>(
-      icon: Icon(Icons.more_vert, size: 16, color: Colors.grey.shade500),
-      padding: EdgeInsets.zero,
-      splashRadius: 16,
-      onSelected: (v) {
-        if (v == 'settings') onSettings();
-        if (v == 'duplicate') onDuplicate();
-        if (v == 'delete') onDelete();
-      },
-      itemBuilder: (_) => const [
-        PopupMenuItem(
-            value: 'settings',
-            child: ListTile(
-                leading: Icon(Icons.tune), title: Text('Advanced edit'))),
-        PopupMenuItem(
-            value: 'duplicate',
-            child: ListTile(
-                leading: Icon(Icons.copy), title: Text('Duplicate'))),
-        PopupMenuItem(
-            value: 'delete',
-            child: ListTile(
-                leading: Icon(Icons.delete_outline, color: Colors.red),
-                title: Text('Delete'))),
-      ],
-    );
-  }
-
-  Widget _body(BuildContext context, AppState state, int rev) {
+  Widget _body(BuildContext context, AppState state, int rev, bool selected) {
     final q = question;
     switch (q.type) {
       case QuestionType.mcq:
-        return _mcq(context, state, rev);
+        return _mcq(state, rev, selected);
       case QuestionType.trueFalse:
-        return _trueFalse(state);
+        return _trueFalse(state, selected);
       case QuestionType.shortQuestion:
         return const _BlankLines(lines: 2);
       case QuestionType.longQuestion:
         return const _BlankLines(lines: 5);
       case QuestionType.fillBlank:
-        return Text('Write the answer in the blank.',
-            style: TextStyle(
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-                color: Colors.grey.shade500));
+        return selected
+            ? Text('Use ____ in the question text to mark a blank.',
+                style: TextStyle(
+                    fontSize: 10,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey.shade500))
+            : const SizedBox(height: 2);
       case QuestionType.fillBlankWithOptions:
-        return _wordBank(state, rev);
+        return _wordBank(state, rev, selected);
       case QuestionType.columnMatch:
-        return _match(state, rev);
+        return _match(state, rev, selected);
       case QuestionType.preschoolImage:
         return _preschool(state, rev);
     }
   }
 
-  // ---- MCQ with draggable options -----------------------------------------
-  Widget _mcq(BuildContext context, AppState state, int rev) {
+  // ---- MCQ with three layouts ---------------------------------------------
+  Widget _mcq(AppState state, int rev, bool selected) {
     final q = question;
-    return ReorderableListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      buildDefaultDragHandles: false,
-      itemCount: q.options.length,
-      onReorder: (o, n) => state.reorderOptions(q, o, n),
-      itemBuilder: (context, i) {
-        return Padding(
-          key: ValueKey('opt_${q.id}_${i}_$rev'),
-          padding: const EdgeInsets.symmetric(vertical: 1),
-          child: Row(
+
+    Widget optionLabel(int i) {
+      final isCorrect = q.correctOption == i;
+      return GestureDetector(
+        onTap: () {
+          q.correctOption = i;
+          state.touch();
+        },
+        child: Container(
+          margin: const EdgeInsets.only(right: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            color: (selected && isCorrect)
+                ? accent.withOpacity(0.18)
+                : Colors.transparent,
+          ),
+          child: Text('(${String.fromCharCode(65 + i)})',
+              style: _bodyStyle.copyWith(
+                  fontWeight:
+                      isCorrect ? FontWeight.bold : FontWeight.normal)),
+        ),
+      );
+    }
+
+    Widget field(int i) => InlineTextField(
+          key: ValueKey('optf_${q.id}_${i}_$rev'),
+          initial: q.options[i],
+          hint: 'Option ${String.fromCharCode(65 + i)}',
+          style: _bodyStyle,
+          onChanged: (v) => q.options[i] = v,
+        );
+
+    Widget removeBtn(int i) => selected && q.options.length > 2
+        ? InkWell(
+            onTap: () {
+              q.options.removeAt(i);
+              if (q.correctOption != null &&
+                  q.correctOption! >= q.options.length) {
+                q.correctOption = q.options.length - 1;
+              }
+              state.updatePaperHeader();
+            },
+            child: Icon(Icons.close, size: 13, color: Colors.grey.shade400),
+          )
+        : const SizedBox.shrink();
+
+    final addBtn = selected
+        ? Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 26),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              icon: const Icon(Icons.add, size: 14),
+              label: const Text('Add option', style: TextStyle(fontSize: 11)),
+              onPressed: () {
+                q.options.add('');
+                state.updatePaperHeader();
+              },
+            ),
+          )
+        : const SizedBox.shrink();
+
+    // Inline row layout.
+    if (q.mcqLayout == McqLayout.row) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 14,
+            runSpacing: 2,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              ReorderableDragStartListener(
-                index: i,
-                child: Icon(Icons.drag_indicator,
-                    size: 15, color: Colors.grey.shade400),
-              ),
-              GestureDetector(
-                onTap: () {
-                  q.correctOption = i;
-                  state.touch();
-                },
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: 20,
-                  height: 20,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: q.correctOption == i
-                        ? accent
-                        : Colors.grey.shade200,
-                  ),
-                  child: Text(
-                    String.fromCharCode(65 + i),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: q.correctOption == i
-                          ? Colors.white
-                          : Colors.grey.shade700,
-                    ),
+              for (var i = 0; i < q.options.length; i++)
+                IntrinsicWidth(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [optionLabel(i), field(i), removeBtn(i)],
                   ),
                 ),
-              ),
-              Expanded(
-                child: InlineTextField(
-                  key: ValueKey('optf_${q.id}_${i}_$rev'),
-                  initial: q.options[i],
-                  hint: 'Option ${String.fromCharCode(65 + i)}',
-                  style: const TextStyle(fontSize: LayoutConst.bodyFont),
-                  onChanged: (v) => q.options[i] = v,
-                ),
-              ),
-              InkWell(
-                onTap: q.options.length <= 2
-                    ? null
-                    : () {
-                        q.options.removeAt(i);
-                        if (q.correctOption != null &&
-                            q.correctOption! >= q.options.length) {
-                          q.correctOption = q.options.length - 1;
-                        }
-                        state.updatePaperHeader();
-                      },
-                child: Icon(Icons.close,
-                    size: 14, color: Colors.grey.shade400),
-              ),
             ],
           ),
+          addBtn,
+        ],
+      );
+    }
+
+    // Two-column grid layout.
+    if (q.mcqLayout == McqLayout.twoColumn) {
+      return LayoutBuilder(builder: (context, c) {
+        final w = (c.maxWidth - 16) / 2;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 16,
+              runSpacing: 2,
+              children: [
+                for (var i = 0; i < q.options.length; i++)
+                  SizedBox(
+                    width: w,
+                    child: Row(
+                      children: [
+                        optionLabel(i),
+                        Expanded(child: field(i)),
+                        removeBtn(i),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            addBtn,
+          ],
         );
-      },
+      });
+    }
+
+    // Single-column layout (default), draggable to reorder when selected.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ReorderableListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          itemCount: q.options.length,
+          onReorder: (o, n) => state.reorderOptions(q, o, n),
+          itemBuilder: (context, i) => Padding(
+            key: ValueKey('opt_${q.id}_${i}_$rev'),
+            padding: const EdgeInsets.symmetric(vertical: 0.5),
+            child: Row(
+              children: [
+                if (selected)
+                  ReorderableDragStartListener(
+                    index: i,
+                    child: Icon(Icons.drag_indicator,
+                        size: 14, color: Colors.grey.shade400),
+                  ),
+                optionLabel(i),
+                Expanded(child: field(i)),
+                removeBtn(i),
+              ],
+            ),
+          ),
+        ),
+        addBtn,
+      ],
     );
   }
 
-  Widget _trueFalse(AppState state) {
+  Widget _trueFalse(AppState state, bool selected) {
     final q = question;
     Widget opt(String label, bool value) {
-      final selected = q.isTrue == value;
+      final isCorrect = q.isTrue == value;
       return GestureDetector(
         onTap: () {
           q.isTrue = value;
           state.touch();
         },
         child: Container(
-          margin: const EdgeInsets.only(right: 10),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          margin: const EdgeInsets.only(right: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-                color: selected ? accent : Colors.grey.shade300),
-            color: selected ? accent.withOpacity(0.12) : null,
+            borderRadius: BorderRadius.circular(4),
+            color: (selected && isCorrect)
+                ? accent.withOpacity(0.18)
+                : Colors.transparent,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(selected ? Icons.check_circle : Icons.circle_outlined,
-                  size: 15, color: selected ? accent : Colors.grey),
-              const SizedBox(width: 4),
-              Text(label, style: const TextStyle(fontSize: 12)),
-            ],
-          ),
+          child: Text('(    )  $label',
+              style: _bodyStyle.copyWith(
+                  fontWeight:
+                      isCorrect ? FontWeight.bold : FontWeight.normal)),
         ),
       );
     }
@@ -246,23 +349,20 @@ class EditableQuestion extends StatelessWidget {
     return Row(children: [opt('True', true), opt('False', false)]);
   }
 
-  Widget _wordBank(AppState state, int rev) {
+  Widget _wordBank(AppState state, int rev, bool selected) {
     final q = question;
     return Container(
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(6),
-        color: Colors.grey.shade50,
+        border: Border.all(color: Colors.grey.shade500),
       ),
       child: Wrap(
-        spacing: 8,
+        spacing: 10,
         runSpacing: 4,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          const Text('Word Bank:',
-              style: TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.bold)),
+          Text('Word Bank:',
+              style: _bodyStyle.copyWith(fontWeight: FontWeight.bold)),
           for (var i = 0; i < q.wordBank.length; i++)
             SizedBox(
               width: 90,
@@ -270,23 +370,24 @@ class EditableQuestion extends StatelessWidget {
                 key: ValueKey('wb_${q.id}_${i}_$rev'),
                 initial: q.wordBank[i],
                 hint: 'word',
-                style: const TextStyle(fontSize: 12),
+                style: _bodyStyle,
                 onChanged: (v) => q.wordBank[i] = v,
               ),
             ),
-          InkWell(
-            onTap: () {
-              q.wordBank.add('');
-              state.updatePaperHeader();
-            },
-            child: const Icon(Icons.add_circle_outline, size: 16),
-          ),
+          if (selected)
+            InkWell(
+              onTap: () {
+                q.wordBank.add('');
+                state.updatePaperHeader();
+              },
+              child: const Icon(Icons.add_circle_outline, size: 16),
+            ),
         ],
       ),
     );
   }
 
-  Widget _match(AppState state, int rev) {
+  Widget _match(AppState state, int rev, bool selected) {
     final q = question;
     return Column(
       children: [
@@ -296,52 +397,58 @@ class EditableQuestion extends StatelessWidget {
             child: Row(
               children: [
                 Text('${i + 1}.',
-                    style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: _bodyStyle.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(width: 4),
                 Expanded(
                   child: InlineTextField(
                     key: ValueKey('ml_${q.id}_${i}_$rev'),
                     initial: q.pairs[i].left,
                     hint: 'Column A',
-                    style: const TextStyle(fontSize: 12),
+                    style: _bodyStyle,
                     onChanged: (v) => q.pairs[i].left = v,
                   ),
                 ),
-                Icon(Icons.arrow_forward,
-                    size: 13, color: Colors.grey.shade400),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Text('(${String.fromCharCode(97 + i)})',
-                    style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: _bodyStyle.copyWith(fontWeight: FontWeight.bold)),
                 const SizedBox(width: 2),
                 Expanded(
                   child: InlineTextField(
                     key: ValueKey('mr_${q.id}_${i}_$rev'),
                     initial: q.pairs[i].right,
                     hint: 'Column B',
-                    style: const TextStyle(fontSize: 12),
+                    style: _bodyStyle,
                     onChanged: (v) => q.pairs[i].right = v,
                   ),
                 ),
+                if (selected && q.pairs.length > 2)
+                  InkWell(
+                    onTap: () {
+                      q.pairs.removeAt(i);
+                      state.updatePaperHeader();
+                    },
+                    child: Icon(Icons.close,
+                        size: 13, color: Colors.grey.shade400),
+                  ),
               ],
             ),
           ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 28),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-            icon: const Icon(Icons.add, size: 14),
-            label: const Text('Add pair', style: TextStyle(fontSize: 11)),
-            onPressed: () {
-              q.pairs.add(MatchPair(left: '', right: ''));
-              state.updatePaperHeader();
-            },
+        if (selected)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 26),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              icon: const Icon(Icons.add, size: 14),
+              label: const Text('Add pair', style: TextStyle(fontSize: 11)),
+              onPressed: () {
+                q.pairs.add(MatchPair(left: '', right: ''));
+                state.updatePaperHeader();
+              },
+            ),
           ),
-        ),
       ],
     );
   }
@@ -355,28 +462,28 @@ class EditableQuestion extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.memory(q.imageBytes!, height: 90),
+              borderRadius: BorderRadius.circular(6),
+              child: Image.memory(q.imageBytes!, height: 88),
             ),
           )
         else
           SizedBox(
-            width: 160,
+            width: 180,
             child: InlineTextField(
               key: ValueKey('emoji_${q.id}_$rev'),
               initial: q.emoji ?? '',
-              hint: 'Add emoji e.g. 🍎🍎🍎 (or attach image in advanced)',
+              hint: 'Emoji 🍎🍎🍎 (or attach image in advanced)',
               style: const TextStyle(fontSize: 26),
               onChanged: (v) => q.emoji = v,
             ),
           ),
         if (q.options.isNotEmpty)
           Wrap(
-            spacing: 10,
+            spacing: 14,
             children: [
               for (var i = 0; i < q.options.length; i++)
                 SizedBox(
-                  width: 90,
+                  width: 96,
                   child: Row(
                     children: [
                       const Text('☐ ', style: TextStyle(fontSize: 13)),
@@ -385,7 +492,7 @@ class EditableQuestion extends StatelessWidget {
                           key: ValueKey('pso_${q.id}_${i}_$rev'),
                           initial: q.options[i],
                           hint: 'choice',
-                          style: const TextStyle(fontSize: 12),
+                          style: _bodyStyle,
                           onChanged: (v) => q.options[i] = v,
                         ),
                       ),
@@ -406,40 +513,6 @@ class EditableQuestion extends StatelessWidget {
   }
 }
 
-class _MarksChip extends StatelessWidget {
-  const _MarksChip({required this.question, required this.accent});
-  final Question question;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final state = context.read<AppState>();
-    return PopupMenuButton<String>(
-      tooltip: 'Marks',
-      onSelected: (v) {
-        if (v == '+') question.marks++;
-        if (v == '-' && question.marks > 1) question.marks--;
-        state.touch();
-      },
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: '+', child: Text('Increase marks')),
-        PopupMenuItem(value: '-', child: Text('Decrease marks')),
-      ],
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: accent.withOpacity(0.14),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text('${question.marks}',
-            style: TextStyle(
-                color: accent, fontWeight: FontWeight.bold, fontSize: 12)),
-      ),
-    );
-  }
-}
-
 class _BlankLines extends StatelessWidget {
   const _BlankLines({required this.lines});
   final int lines;
@@ -451,8 +524,8 @@ class _BlankLines extends StatelessWidget {
         for (var i = 0; i < lines; i++)
           Container(
             margin: const EdgeInsets.only(top: 16),
-            height: 1,
-            color: Colors.grey.shade300,
+            height: 0.8,
+            color: Colors.grey.shade400,
           ),
       ],
     );

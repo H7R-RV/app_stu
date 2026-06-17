@@ -164,6 +164,8 @@ class _QuestionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.read<AppState>();
     final accent = AppTheme.typeColor(question.type.index);
+    final selected =
+        context.select<AppState, bool>((s) => s.selectedId == question.id);
 
     final card = EditableQuestion(
       question: question,
@@ -174,39 +176,42 @@ class _QuestionRow extends StatelessWidget {
       onDelete: () => state.removeFromPaper(question.id),
     );
 
+    final handle = Draggable<Object>(
+      data: MoveQuestionPayload(question.id),
+      feedback: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: 220,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: accent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: AppTheme.softShadow,
+          ),
+          child: Text(
+            'Q${index + 1}: ${question.text}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.4,
+        child: Icon(Icons.drag_indicator, color: Colors.grey.shade400),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8, right: 2),
+        child: Icon(Icons.drag_indicator,
+            size: 18, color: accent.withOpacity(0.8)),
+      ),
+    );
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Draggable<Object>(
-          data: MoveQuestionPayload(question.id),
-          feedback: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: 220,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: accent,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: AppTheme.softShadow,
-              ),
-              child: Text(
-                'Q${index + 1}: ${question.text}',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-              ),
-            ),
-          ),
-          childWhenDragging: Opacity(
-            opacity: 0.4,
-            child: Icon(Icons.drag_indicator, color: Colors.grey.shade400),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.only(top: 6, right: 2),
-            child: Icon(Icons.drag_indicator,
-                size: 18, color: accent.withOpacity(0.7)),
-          ),
-        ),
+        // Drag handle only shows on the selected question to keep the page clean.
+        selected ? handle : const SizedBox(width: 6),
         Expanded(child: card),
       ],
     );
@@ -279,9 +284,9 @@ class _DashedBorderPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF6366F1).withOpacity(0.25)
+      ..color = const Color(0xFF9AA0A6).withOpacity(0.5)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
+      ..strokeWidth = 0.8;
     const dash = 5.0;
     const gap = 4.0;
 

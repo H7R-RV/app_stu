@@ -57,6 +57,22 @@ class AppState extends ChangeNotifier {
   /// rebuild with fresh values (keys include the revision).
   int revision = 0;
 
+  /// The currently selected question (shows its editing controls).
+  String? selectedId;
+
+  void select(String? id) {
+    if (selectedId == id) return;
+    selectedId = id;
+    notifyListeners();
+  }
+
+  /// Cycles an MCQ question between single-column / row / two-column layouts.
+  void cycleMcqLayout(Question q) {
+    const order = McqLayout.values;
+    q.mcqLayout = order[(q.mcqLayout.index + 1) % order.length];
+    _structural();
+  }
+
   void _structural() {
     revision++;
     notifyListeners();

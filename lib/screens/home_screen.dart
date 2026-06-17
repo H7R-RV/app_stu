@@ -6,6 +6,7 @@ import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import 'builder_screen.dart';
 import 'paper_settings_screen.dart';
+import 'preview_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -21,6 +22,20 @@ class HomeScreen extends StatelessWidget {
           decoration: BoxDecoration(gradient: AppTheme.appBarGradient),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Print preview (exact)',
+            icon: const Icon(Icons.visibility, color: Colors.white),
+            onPressed: () {
+              final state = context.read<AppState>();
+              if (state.paper.questions.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Add some questions to the paper first.')));
+                return;
+              }
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => PreviewScreen(paper: state.paper)));
+            },
+          ),
           IconButton(
             tooltip: 'Paper settings',
             icon: const Icon(Icons.settings, color: Colors.white),

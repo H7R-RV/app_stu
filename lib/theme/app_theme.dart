@@ -34,11 +34,11 @@ class AppTheme {
     );
   }
 
-  /// The dark "desk" behind the floating white pages.
+  /// The light-grey "desk" behind the white pages, like Microsoft Word.
   static const LinearGradient deskGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF312E81), Color(0xFF1E1B4B), Color(0xFF0B1020)],
+    colors: [Color(0xFFEDEEF2), Color(0xFFE2E4EA), Color(0xFFD7D9E0)],
   );
 
   static const LinearGradient appBarGradient = LinearGradient(
@@ -53,18 +53,18 @@ class AppTheme {
     colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
   );
 
-  /// Layered shadows that make a page look like it floats above the desk.
+  /// Subtle shadow that makes the white page sit above the grey desk (Word).
   static List<BoxShadow> pageShadows = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.45),
-      blurRadius: 40,
-      spreadRadius: -6,
-      offset: const Offset(0, 22),
+      color: Colors.black.withOpacity(0.22),
+      blurRadius: 18,
+      spreadRadius: -2,
+      offset: const Offset(0, 8),
     ),
     BoxShadow(
-      color: Colors.black.withOpacity(0.25),
-      blurRadius: 10,
-      offset: const Offset(0, 5),
+      color: Colors.black.withOpacity(0.10),
+      blurRadius: 4,
+      offset: const Offset(0, 2),
     ),
   ];
 

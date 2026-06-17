@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+
 /// The kinds of questions the generator can build and export.
 enum QuestionType {
   mcq,
@@ -56,6 +58,33 @@ extension QuestionTypeInfo on QuestionType {
   }
 }
 
+/// How MCQ / multiple-choice options are arranged on the page.
+enum McqLayout { column, row, twoColumn }
+
+extension McqLayoutInfo on McqLayout {
+  String get label {
+    switch (this) {
+      case McqLayout.column:
+        return 'Single column';
+      case McqLayout.row:
+        return 'Inline row';
+      case McqLayout.twoColumn:
+        return 'Two columns';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case McqLayout.column:
+        return Icons.view_agenda_outlined;
+      case McqLayout.row:
+        return Icons.view_column_outlined;
+      case McqLayout.twoColumn:
+        return Icons.grid_view_outlined;
+    }
+  }
+}
+
 /// A single Column-A -> Column-B matching pair.
 class MatchPair {
   MatchPair({required this.left, required this.right});
@@ -85,6 +114,7 @@ class Question {
     this.emoji,
     this.imageBytes,
     this.marks = 1,
+    this.mcqLayout = McqLayout.column,
   }) : pairs = pairs ?? [];
 
   final String id;
@@ -119,6 +149,9 @@ class Question {
 
   int marks;
 
+  /// Arrangement of MCQ options on the page.
+  McqLayout mcqLayout;
+
   /// Deep copy so editing a question placed on a paper never mutates the bank.
   Question copyWith({String? id}) {
     return Question(
@@ -136,6 +169,7 @@ class Question {
       emoji: emoji,
       imageBytes: imageBytes,
       marks: marks,
+      mcqLayout: mcqLayout,
     );
   }
 }

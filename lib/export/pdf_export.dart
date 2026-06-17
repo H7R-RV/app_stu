@@ -126,12 +126,38 @@ class PdfExporter {
   static pw.Widget _body(Question q) {
     switch (q.type) {
       case QuestionType.mcq:
+        String opt(int i) =>
+            '(${String.fromCharCode(65 + i)})  ${asciiSafe(q.options[i])}';
+        if (q.mcqLayout == McqLayout.row) {
+          return pw.Wrap(
+            spacing: 18,
+            runSpacing: 3,
+            children: [
+              for (var i = 0; i < q.options.length; i++) pw.Text(opt(i)),
+            ],
+          );
+        }
+        if (q.mcqLayout == McqLayout.twoColumn) {
+          final rows = <pw.Widget>[];
+          for (var i = 0; i < q.options.length; i += 2) {
+            rows.add(pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(child: pw.Text(opt(i))),
+                pw.Expanded(
+                    child: i + 1 < q.options.length
+                        ? pw.Text(opt(i + 1))
+                        : pw.SizedBox()),
+              ],
+            ));
+          }
+          return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start, children: rows);
+        }
         return pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            for (var i = 0; i < q.options.length; i++)
-              pw.Text(
-                  '(${String.fromCharCode(65 + i)})  ${asciiSafe(q.options[i])}'),
+            for (var i = 0; i < q.options.length; i++) pw.Text(opt(i)),
           ],
         );
       case QuestionType.trueFalse:

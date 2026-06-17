@@ -53,8 +53,21 @@ double estimateQuestionHeight(Question q, double contentWidth) {
 
   switch (q.type) {
     case QuestionType.mcq:
-      for (final o in q.options) {
-        h += math.max(1, linesOf(o)) * LayoutConst.optionHeight;
+      switch (q.mcqLayout) {
+        case McqLayout.row:
+          final total = q.options.fold<int>(
+              0, (s, o) => s + o.length + 6);
+          h += math.max(1, (total / charsPerLine).ceil()) *
+              LayoutConst.optionHeight;
+          break;
+        case McqLayout.twoColumn:
+          h += (q.options.length / 2).ceil() * LayoutConst.optionHeight;
+          break;
+        case McqLayout.column:
+          for (final o in q.options) {
+            h += math.max(1, linesOf(o)) * LayoutConst.optionHeight;
+          }
+          break;
       }
       break;
     case QuestionType.trueFalse:
