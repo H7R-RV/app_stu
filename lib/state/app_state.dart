@@ -44,6 +44,11 @@ class AppState extends ChangeNotifier {
     return s;
   }
 
+  List<String> get grades {
+    final s = <String>{for (final q in _bank) q.grade}.toList()..sort();
+    return s;
+  }
+
   List<Question> filteredBank({
     String? subject,
     QuestionType? type,

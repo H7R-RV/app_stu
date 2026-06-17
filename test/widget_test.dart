@@ -6,6 +6,7 @@ import 'package:simple_demo/export/pdf_export.dart';
 import 'package:simple_demo/main.dart';
 import 'package:simple_demo/models/doc_element.dart';
 import 'package:simple_demo/models/document.dart';
+import 'package:simple_demo/models/generator.dart';
 
 TestDocument _sampleDoc() {
   final doc = TestDocument();
@@ -35,13 +36,21 @@ TestDocument _sampleDoc() {
 }
 
 void main() {
-  testWidgets('App boots and shows the canvas toolbar',
+  testWidgets('App boots and shows the start screen',
       (WidgetTester tester) async {
     await tester.pumpWidget(const TestGeneratorApp());
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('Canva Test Designer'), findsOneWidget);
-    expect(find.text('Text'), findsWidgets);
+    expect(find.text('Test Paper Studio'), findsOneWidget);
+    expect(find.text('Auto-Generate Paper'), findsOneWidget);
+  });
+
+  test('Paper generator builds sets with answer key', () {
+    final bank = buildQuestionBank();
+    final cfg = GeneratorConfig()..sets = 2;
+    final paper = generatePaper(cfg, bank);
+    expect(paper.sets.length, 2);
+    expect(paper.sets.first.sections.isNotEmpty, true);
   });
 
   test('Question library is populated', () {
