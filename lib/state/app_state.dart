@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show TextAlign;
 import 'package:uuid/uuid.dart';
 
 import '../data/question_bank.dart';
@@ -163,6 +164,114 @@ class AppState extends ChangeNotifier {
       strokeColor: 0xFF111111,
       strokeWidth: 2,
     ));
+  }
+
+  void addPolygon(ShapeKind kind) {
+    _add(DocElement(
+      id: _uuid.v4(),
+      type: ElementType.polygon,
+      x: _cx(130),
+      y: 110,
+      w: 130,
+      h: 130,
+      shape: kind,
+      fill: 0xFFFFE08A,
+      strokeColor: 0xFFF59E0B,
+      strokeWidth: 0,
+    ));
+  }
+
+  /// Inserts a pre-designed group of elements (a ready-made layout block).
+  void insertTemplate(String kind) {
+    final pw = _pw;
+    final margin = 40.0;
+    final width = pw - margin * 2;
+    DocElement t(String text,
+        {required double y,
+        double? x,
+        double? w,
+        double size = 13,
+        bool bold = false,
+        TextAlign align = TextAlign.left,
+        int color = 0xFF111111}) {
+      return DocElement(
+        id: _uuid.v4(),
+        type: ElementType.text,
+        x: x ?? margin,
+        y: y,
+        w: w ?? width,
+        h: size * 1.6 + 6,
+        text: text,
+        fontSize: size,
+        bold: bold,
+        align: align,
+        color: color,
+      );
+    }
+
+    DocElement line(double y) => DocElement(
+          id: _uuid.v4(),
+          type: ElementType.line,
+          x: margin,
+          y: y,
+          w: width,
+          h: 2,
+          strokeColor: 0xFF111111,
+        );
+
+    final added = <DocElement>[];
+    switch (kind) {
+      case 'header':
+        added.addAll([
+          t('SCHOOL NAME',
+              y: 40,
+              size: 26,
+              bold: true,
+              align: TextAlign.center,
+              color: 0xFF1E1B4B),
+          t('First Term Examination 2025',
+              y: 76, size: 15, align: TextAlign.center),
+          line(104),
+          t('Name: ______________     Class: ________     Date: __________',
+              y: 112, size: 12),
+        ]);
+        break;
+      case 'mcq':
+        added.add(t('Q. Type your question here?', y: 120, size: 14, bold: true));
+        for (var i = 0; i < 4; i++) {
+          added.add(t('(${String.fromCharCode(65 + i)})  Option ${i + 1}',
+              y: 146.0 + i * 22, x: margin + 20, w: width - 20, size: 13));
+        }
+        break;
+      case 'truefalse':
+        added.add(t('Q. Statement goes here.', y: 120, size: 14, bold: true));
+        added.add(t('(      ) True            (      ) False',
+            y: 146, x: margin + 20, size: 13));
+        break;
+      case 'answer':
+        added.add(t('Q. Write your answer below:', y: 120, size: 14, bold: true));
+        for (var i = 0; i < 4; i++) {
+          added.add(line(152.0 + i * 26));
+        }
+        break;
+      case 'section':
+        added.add(DocElement(
+          id: _uuid.v4(),
+          type: ElementType.rect,
+          x: margin,
+          y: 110,
+          w: width,
+          h: 28,
+          fill: 0xFF4F46E5,
+        ));
+        added.add(t('SECTION A — Multiple Choice Questions',
+            y: 115, x: margin + 8, size: 14, bold: true, color: 0xFFFFFFFF));
+        break;
+    }
+    page.elements.addAll(added);
+    selectedId = added.isNotEmpty ? added.last.id : selectedId;
+    editingId = null;
+    notifyListeners();
   }
 
   /// Inserts a question from the library as a pre-formatted text block.

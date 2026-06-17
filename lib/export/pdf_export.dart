@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../models/doc_element.dart';
 import '../models/document.dart';
 import '../models/page_size.dart';
+import '../widgets/shape_geometry.dart';
 import 'font_loader.dart';
 
 /// Renders the canvas document to a pixel-accurate PDF (positioned elements,
@@ -127,6 +128,37 @@ class PdfExporter {
       case ElementType.line:
         return pw.Container(
             width: e.w, height: e.h, color: PdfColor.fromInt(e.strokeColor));
+      case ElementType.polygon:
+        final pts = shapePoints(e.shape);
+        final hasFill = e.fill != null;
+        final hasStroke = e.strokeWidth > 0;
+        return pw.CustomPaint(
+          size: PdfPoint(e.w, e.h),
+          painter: (canvas, size) {
+            for (var i = 0; i < pts.length; i++) {
+              final x = pts[i][0] * size.x;
+              final y = size.y - pts[i][1] * size.y; // flip to PDF y-up
+              if (i == 0) {
+                canvas.moveTo(x, y);
+              } else {
+                canvas.lineTo(x, y);
+              }
+            }
+            canvas.closePath();
+            if (hasFill) canvas.setFillColor(PdfColor.fromInt(e.fill!));
+            if (hasStroke) {
+              canvas.setStrokeColor(PdfColor.fromInt(e.strokeColor));
+              canvas.setLineWidth(e.strokeWidth);
+            }
+            if (hasFill && hasStroke) {
+              canvas.fillAndStrokePath();
+            } else if (hasFill) {
+              canvas.fillPath();
+            } else {
+              canvas.strokePath();
+            }
+          },
+        );
     }
   }
 

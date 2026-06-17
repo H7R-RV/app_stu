@@ -51,6 +51,7 @@ class DocxExporter {
           case ElementType.rect:
           case ElementType.ellipse:
           case ElementType.line:
+          case ElementType.polygon:
             break; // shapes are not represented in the Word flow
         }
       }

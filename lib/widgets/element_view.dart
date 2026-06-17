@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../models/doc_element.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import 'shape_geometry.dart';
 
 /// Renders a single [DocElement] on the page and handles selection, dragging,
 /// resizing and (for text) inline editing. All geometry is in points; [scale]
@@ -49,10 +50,21 @@ class ElementView extends StatelessWidget {
       onPanUpdate: editing
           ? null
           : (d) {
-              e.x = (e.x + d.delta.dx / scale)
-                  .clamp(-e.w + 20, pageWpt - 20);
-              e.y = (e.y + d.delta.dy / scale)
-                  .clamp(-e.h + 20, pageHpt - 20);
+              var nx = (e.x + d.delta.dx / scale)
+                  .clamp(-e.w + 20, pageWpt - 20)
+                  .toDouble();
+              var ny = (e.y + d.delta.dy / scale)
+                  .clamp(-e.h + 20, pageHpt - 20)
+                  .toDouble();
+              // Snap to the page's horizontal / vertical centre for accuracy.
+              if (((nx + e.w / 2) - pageWpt / 2).abs() < 6) {
+                nx = (pageWpt - e.w) / 2;
+              }
+              if (((ny + e.h / 2) - pageHpt / 2).abs() < 6) {
+                ny = (pageHpt - e.h) / 2;
+              }
+              e.x = nx;
+              e.y = ny;
               state.touch();
             },
       child: content,
@@ -137,6 +149,16 @@ class ElementView extends StatelessWidget {
         );
       case ElementType.line:
         return Container(color: e.stroke);
+      case ElementType.polygon:
+        return CustomPaint(
+          painter: _ShapePainter(
+            points: shapePoints(e.shape),
+            fill: e.fillColor,
+            stroke: e.strokeWidth > 0 ? e.stroke : null,
+            strokeWidth: e.strokeWidth * scale,
+          ),
+          child: const SizedBox.expand(),
+        );
     }
   }
 
@@ -191,6 +213,55 @@ TextStyle _textStyle(DocElement e, double scale) {
   );
 }
 
+class _ShapePainter extends CustomPainter {
+  _ShapePainter({
+    required this.points,
+    this.fill,
+    this.stroke,
+    this.strokeWidth = 0,
+  });
+
+  final List<List<double>> points;
+  final Color? fill;
+  final Color? stroke;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path();
+    for (var i = 0; i < points.length; i++) {
+      final x = points[i][0] * size.width;
+      final y = points[i][1] * size.height;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    path.close();
+    if (fill != null) {
+      canvas.drawPath(path, Paint()..color = fill!);
+    }
+    if (stroke != null && strokeWidth > 0) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = stroke!
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeWidth
+          ..strokeJoin = StrokeJoin.round,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ShapePainter old) =>
+      old.fill != fill ||
+      old.stroke != stroke ||
+      old.strokeWidth != strokeWidth ||
+      old.points != points;
+}
+
 class _InlineEditor extends StatefulWidget {
   const _InlineEditor({required this.element, required this.scale});
   final DocElement element;
@@ -208,7 +279,16 @@ class _InlineEditorState extends State<_InlineEditor> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _f.requestFocus());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _f.requestFocus();
+      // Keep the edited box visible once the keyboard pushes the view up.
+      Future.delayed(const Duration(milliseconds: 350), () {
+        if (mounted) {
+          Scrollable.ensureVisible(context,
+              alignment: 0.3, duration: const Duration(milliseconds: 250));
+        }
+      });
+    });
     _f.addListener(() {
       if (!_f.hasFocus && mounted) context.read<AppState>().stopEditing();
     });

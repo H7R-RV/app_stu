@@ -3,7 +3,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 /// The kinds of free-floating items that can be placed on the canvas.
-enum ElementType { text, image, rect, ellipse, line }
+enum ElementType { text, image, rect, ellipse, line, polygon }
+
+/// Vector shape varieties (drawn identically on screen and in the PDF).
+enum ShapeKind { triangle, diamond, pentagon, hexagon, star, arrow }
 
 /// The bundled font families available in the editor.
 const List<String> kFontFamilies = [
@@ -70,6 +73,7 @@ class DocElement {
     this.strokeWidth = 0,
     this.opacity = 1.0,
     this.imageBytes,
+    this.shape = ShapeKind.star,
   });
 
   final String id;
@@ -100,6 +104,9 @@ class DocElement {
   // Image
   Uint8List? imageBytes;
 
+  // Polygon shape variety
+  ShapeKind shape;
+
   Color get textColor => Color(color);
   Color? get fillColor => fill == null ? null : Color(fill!);
   Color get stroke => Color(strokeColor);
@@ -128,6 +135,7 @@ class DocElement {
       strokeWidth: strokeWidth,
       opacity: opacity,
       imageBytes: imageBytes,
+      shape: shape,
     );
   }
 }

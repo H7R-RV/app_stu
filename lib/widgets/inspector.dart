@@ -35,7 +35,9 @@ class Inspector extends StatelessWidget {
             children: [
               if (e.isText) ..._textControls(context, state, e),
               if (e.type == ElementType.image) ..._imageControls(state, e),
-              if (e.type == ElementType.rect || e.type == ElementType.ellipse)
+              if (e.type == ElementType.rect ||
+                  e.type == ElementType.ellipse ||
+                  e.type == ElementType.polygon)
                 ..._shapeControls(state, e),
               if (e.type == ElementType.line) ..._lineControls(state, e),
               const SizedBox(height: 8),
@@ -340,6 +342,8 @@ class Inspector extends StatelessWidget {
         return 'Ellipse';
       case ElementType.line:
         return 'Line';
+      case ElementType.polygon:
+        return 'Shape';
     }
   }
 }
