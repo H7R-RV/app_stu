@@ -1,0 +1,246 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../models/doc_element.dart';
+import '../state/app_state.dart';
+import '../theme/app_theme.dart';
+
+/// Renders a single [DocElement] on the page and handles selection, dragging,
+/// resizing and (for text) inline editing. All geometry is in points; [scale]
+/// converts points to on-screen pixels.
+class ElementView extends StatelessWidget {
+  const ElementView({
+    super.key,
+    required this.element,
+    required this.scale,
+    required this.pageWpt,
+    required this.pageHpt,
+  });
+
+  final DocElement element;
+  final double scale;
+  final double pageWpt;
+  final double pageHpt;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.read<AppState>();
+    final selected =
+        context.select<AppState, bool>((s) => s.selectedId == element.id);
+    final editing =
+        context.select<AppState, bool>((s) => s.editingId == element.id);
+
+    final e = element;
+    final w = e.w * scale;
+    final h = e.h * scale;
+
+    final content = Opacity(
+      opacity: e.opacity,
+      child: SizedBox(width: w, height: h, child: _content(editing, state)),
+    );
+
+    final body = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => state.select(e.id),
+      onDoubleTap: e.isText ? () => state.startEditing(e.id) : null,
+      onPanStart: editing ? null : (_) => state.select(e.id),
+      onPanUpdate: editing
+          ? null
+          : (d) {
+              e.x = (e.x + d.delta.dx / scale)
+                  .clamp(-e.w + 20, pageWpt - 20);
+              e.y = (e.y + d.delta.dy / scale)
+                  .clamp(-e.h + 20, pageHpt - 20);
+              state.touch();
+            },
+      child: content,
+    );
+
+    return Positioned(
+      left: e.x * scale,
+      top: e.y * scale,
+      child: Transform.rotate(
+        angle: e.rotation * math.pi / 180,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            body,
+            if (selected && !editing) ...[
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppTheme.seed, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+              _handle(
+                right: -7,
+                bottom: -7,
+                icon: Icons.open_in_full,
+                onPan: (d) {
+                  e.w = math.max(20, e.w + d.delta.dx / scale);
+                  e.h = math.max(10, e.h + d.delta.dy / scale);
+                  state.touch();
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _content(bool editing, AppState state) {
+    final e = element;
+    switch (e.type) {
+      case ElementType.text:
+        if (editing) {
+          return _InlineEditor(element: e, scale: scale);
+        }
+        return Container(
+          color: e.fillColor,
+          alignment: _alignFor(e.align),
+          child: Text(
+            e.text.isEmpty ? ' ' : e.text,
+            textAlign: e.align,
+            style: _textStyle(e, scale),
+          ),
+        );
+      case ElementType.image:
+        if (e.imageBytes == null) {
+          return Container(color: Colors.grey.shade200);
+        }
+        return Image.memory(e.imageBytes!, fit: BoxFit.fill);
+      case ElementType.rect:
+        return Container(
+          decoration: BoxDecoration(
+            color: e.fillColor,
+            border: e.strokeWidth > 0
+                ? Border.all(color: e.stroke, width: e.strokeWidth * scale)
+                : null,
+          ),
+        );
+      case ElementType.ellipse:
+        return Container(
+          decoration: BoxDecoration(
+            color: e.fillColor,
+            borderRadius:
+                BorderRadius.all(Radius.elliptical(e.w * scale, e.h * scale)),
+            border: e.strokeWidth > 0
+                ? Border.all(color: e.stroke, width: e.strokeWidth * scale)
+                : null,
+          ),
+        );
+      case ElementType.line:
+        return Container(color: e.stroke);
+    }
+  }
+
+  Widget _handle({
+    double? right,
+    double? bottom,
+    required IconData icon,
+    required void Function(DragUpdateDetails) onPan,
+  }) {
+    return Positioned(
+      right: right,
+      bottom: bottom,
+      child: GestureDetector(
+        onPanUpdate: onPan,
+        child: Container(
+          width: 18,
+          height: 18,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            border: Border.all(color: AppTheme.seed, width: 1.5),
+            boxShadow: AppTheme.softShadow,
+          ),
+          child: Icon(icon, size: 10, color: AppTheme.seed),
+        ),
+      ),
+    );
+  }
+
+  static Alignment _alignFor(TextAlign a) {
+    switch (a) {
+      case TextAlign.center:
+        return Alignment.center;
+      case TextAlign.right:
+      case TextAlign.end:
+        return Alignment.centerRight;
+      default:
+        return Alignment.centerLeft;
+    }
+  }
+}
+
+TextStyle _textStyle(DocElement e, double scale) {
+  return TextStyle(
+    fontFamily: e.fontFamily,
+    fontSize: e.fontSize * scale,
+    color: e.textColor,
+    fontWeight: e.bold ? FontWeight.bold : FontWeight.normal,
+    fontStyle: e.italic ? FontStyle.italic : FontStyle.normal,
+    decoration: e.underline ? TextDecoration.underline : TextDecoration.none,
+    height: 1.2,
+  );
+}
+
+class _InlineEditor extends StatefulWidget {
+  const _InlineEditor({required this.element, required this.scale});
+  final DocElement element;
+  final double scale;
+
+  @override
+  State<_InlineEditor> createState() => _InlineEditorState();
+}
+
+class _InlineEditorState extends State<_InlineEditor> {
+  late final TextEditingController _c =
+      TextEditingController(text: widget.element.text);
+  late final FocusNode _f = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _f.requestFocus());
+    _f.addListener(() {
+      if (!_f.hasFocus && mounted) context.read<AppState>().stopEditing();
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.element.text = _c.text;
+    _c.dispose();
+    _f.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final e = widget.element;
+    return Container(
+      color: e.fillColor ?? Colors.white,
+      child: TextField(
+        controller: _c,
+        focusNode: _f,
+        maxLines: null,
+        textAlign: e.align,
+        style: _textStyle(e, widget.scale),
+        cursorColor: AppTheme.seed,
+        decoration: const InputDecoration(
+          isDense: true,
+          contentPadding: EdgeInsets.zero,
+          border: InputBorder.none,
+        ),
+        onChanged: (v) => e.text = v,
+      ),
+    );
+  }
+}

@@ -2,17 +2,20 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/material.dart' show TextAlign;
 
-import '../models/question.dart';
-import '../models/test_paper.dart';
+import '../models/doc_element.dart';
+import '../models/document.dart';
+import '../models/page_size.dart';
 import 'text_utils.dart';
 
-/// Builds the test paper as a Microsoft Word (.docx) file.
+/// Best-effort Microsoft Word (.docx) export of the canvas document.
 ///
-/// A .docx is a ZIP package of OOXML parts; we assemble the minimal set of
-/// parts needed for a valid, Word-openable document (with embedded images).
+/// Word is not an absolute-positioning format, so elements are emitted in
+/// reading order (top-to-bottom, left-to-right per page) as styled paragraphs;
+/// images are embedded. The PDF export is the pixel-accurate one.
 class DocxExporter {
-  static Uint8List build(TestPaper paper) {
+  static Uint8List build(TestDocument doc) {
     final body = StringBuffer();
     final media = <_Media>[];
     final rels = StringBuffer();
@@ -29,174 +32,54 @@ class DocxExporter {
       return rid;
     }
 
-    // ---- Header ----
-    final c = paper.header;
-    if (c.showSchool) {
-      body.write(_para(paper.schoolName, bold: true, size: 32, align: 'center'));
-    }
-    if (c.showTitle) {
-      body.write(_para(paper.title, bold: true, size: 26, align: 'center'));
-    }
-    final meta1 = [
-      if (c.showSubject) 'Subject: ${paper.subject}',
-      if (c.showClass) 'Class: ${paper.grade}',
-    ];
-    final meta2 = [
-      if (c.showTime) 'Time: ${paper.timeAllowed}',
-      if (c.showMarks) 'Total Marks: ${paper.totalMarks}',
-    ];
-    if (meta1.isNotEmpty) body.write(_para(meta1.join('\t\t'), size: 22));
-    if (meta2.isNotEmpty) body.write(_para(meta2.join('\t\t'), size: 22));
-    body.write(_rule());
-    final student = [
-      if (c.showName) 'Name: ____________________',
-      if (c.showRoll) 'Roll No: __________',
-      if (c.showDate) 'Date: ${c.date.isEmpty ? '__________' : c.date}',
-    ];
-    if (student.isNotEmpty) body.write(_para(student.join('     '), size: 22));
-    if (c.showInstructions && paper.instructions.trim().isNotEmpty) {
-      body.write(_para('Instructions: ${paper.instructions}',
-          italic: true, size: 20));
-    }
-    body.write(_rule());
-
-    // ---- Questions ----
-    for (var i = 0; i < paper.questions.length; i++) {
-      final q = paper.questions[i];
-      body.write(_para('Q${i + 1}. ${q.text}   (${q.marks})',
-          bold: true, size: 22, spacingBefore: 120));
-      body.write(_questionBody(q, addImage, () => drawingId++));
-    }
-
-    // ---- Answer key ----
-    if (paper.showAnswerKey) {
-      body.write(_rule());
-      body.write(_para('Answer Key', bold: true, size: 26));
-      for (var i = 0; i < paper.questions.length; i++) {
-        body.write(_para('Q${i + 1}. ${answerOf(paper.questions[i])}',
-            size: 22));
+    for (var p = 0; p < doc.pages.length; p++) {
+      final elements = [...doc.pages[p].elements]
+        ..sort((a, b) => a.y != b.y ? a.y.compareTo(b.y) : a.x.compareTo(b.x));
+      for (final e in elements) {
+        switch (e.type) {
+          case ElementType.text:
+            for (final line in e.text.split('\n')) {
+              body.write(_textPara(e, line));
+            }
+            break;
+          case ElementType.image:
+            if (e.imageBytes != null) {
+              body.write(_imagePara(addImage(e.imageBytes!), drawingId++,
+                  e.w, e.h));
+            }
+            break;
+          case ElementType.rect:
+          case ElementType.ellipse:
+          case ElementType.line:
+            break; // shapes are not represented in the Word flow
+        }
+      }
+      if (p < doc.pages.length - 1) {
+        body.write('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
       }
     }
 
-    return _zip(paper, body.toString(), rels.toString(), media);
+    return _zip(doc, body.toString(), rels.toString(), media);
   }
 
-  static String _questionBody(
-      Question q, String Function(Uint8List) addImage, int Function() nextId) {
-    final b = StringBuffer();
-    switch (q.type) {
-      case QuestionType.mcq:
-        String opt(int i) =>
-            '(${String.fromCharCode(65 + i)})  ${q.options[i]}';
-        if (q.mcqLayout == McqLayout.row) {
-          b.write(_para(
-              [for (var i = 0; i < q.options.length; i++) opt(i)].join('     '),
-              size: 22, indent: 360));
-        } else if (q.mcqLayout == McqLayout.twoColumn) {
-          for (var i = 0; i < q.options.length; i += 2) {
-            final right = i + 1 < q.options.length ? '\t\t${opt(i + 1)}' : '';
-            b.write(_para('${opt(i)}$right', size: 22, indent: 360));
-          }
-        } else {
-          for (var i = 0; i < q.options.length; i++) {
-            b.write(_para(opt(i), size: 22, indent: 360));
-          }
-        }
-        break;
-      case QuestionType.trueFalse:
-        b.write(_para('(  ) True            (  ) False',
-            size: 22, indent: 360));
-        break;
-      case QuestionType.shortQuestion:
-        for (var i = 0; i < 2; i++) {
-          b.write(_blankLine());
-        }
-        break;
-      case QuestionType.longQuestion:
-        for (var i = 0; i < 5; i++) {
-          b.write(_blankLine());
-        }
-        break;
-      case QuestionType.fillBlank:
-        break;
-      case QuestionType.fillBlankWithOptions:
-        b.write(_para('Word Bank:  ${q.wordBank.join('    ')}',
-            bold: true, size: 22, indent: 360));
-        break;
-      case QuestionType.columnMatch:
-        b.write(_para('Column A\t\t\tColumn B', bold: true, size: 22));
-        for (var i = 0; i < q.pairs.length; i++) {
-          final right = i < q.pairs.length ? q.pairs[i].right : '';
-          b.write(_para(
-              '${i + 1}. ${q.pairs[i].left}\t\t\t(${String.fromCharCode(97 + i)}) $right',
-              size: 22, indent: 360));
-        }
-        break;
-      case QuestionType.preschoolImage:
-        if ((q.emoji ?? '').isNotEmpty && q.imageBytes == null) {
-          b.write(_para(q.emoji!, size: 48, indent: 360));
-        }
-        if (q.imageBytes != null) {
-          final rid = addImage(q.imageBytes!);
-          b.write(_imagePara(rid, nextId()));
-        }
-        if (q.options.isNotEmpty) {
-          b.write(_para(q.options.map((o) => '( ) $o').join('     '),
-              size: 22, indent: 360));
-        } else {
-          b.write(_para('____________________', size: 22, indent: 360));
-        }
-        break;
-    }
-    return b.toString();
+  static String _textPara(DocElement e, String text) {
+    final hex = _hex(e.color);
+    final size = (e.fontSize * 2).round(); // half-points
+    final jc = e.align == TextAlign.center
+        ? 'center'
+        : (e.align == TextAlign.right ? 'right' : 'left');
+    return '<w:p><w:pPr><w:jc w:val="$jc"/></w:pPr>'
+        '<w:r><w:rPr>'
+        '<w:rFonts w:ascii="${xmlEscape(e.fontFamily)}" w:hAnsi="${xmlEscape(e.fontFamily)}"/>'
+        '${e.bold ? '<w:b/>' : ''}${e.italic ? '<w:i/>' : ''}'
+        '${e.underline ? '<w:u w:val="single"/>' : ''}'
+        '<w:color w:val="$hex"/><w:sz w:val="$size"/><w:szCs w:val="$size"/>'
+        '</w:rPr><w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r></w:p>';
   }
 
-  // ---- Paragraph builders --------------------------------------------------
-
-  static String _para(
-    String text, {
-    bool bold = false,
-    bool italic = false,
-    int size = 22,
-    String align = 'left',
-    int indent = 0,
-    int spacingBefore = 0,
-  }) {
-    final runs = StringBuffer();
-    final parts = text.split('\t');
-    for (var i = 0; i < parts.length; i++) {
-      if (i > 0) runs.write('<w:r><w:tab/></w:r>');
-      runs.write('<w:r><w:rPr>'
-          '${bold ? '<w:b/>' : ''}${italic ? '<w:i/>' : ''}'
-          '<w:sz w:val="$size"/><w:szCs w:val="$size"/></w:rPr>'
-          '<w:t xml:space="preserve">${xmlEscape(parts[i])}</w:t></w:r>');
-    }
-    final pPr = StringBuffer('<w:pPr>');
-    if (align != 'left') pPr.write('<w:jc w:val="$align"/>');
-    if (indent > 0) pPr.write('<w:ind w:left="$indent"/>');
-    if (spacingBefore > 0) pPr.write('<w:spacing w:before="$spacingBefore"/>');
-    pPr.write('</w:pPr>');
-    return '<w:p>${pPr.toString()}${runs.toString()}</w:p>';
-  }
-
-  /// A paragraph with a bottom border, used as a writing line.
-  static String _blankLine() {
-    return '<w:p><w:pPr><w:spacing w:before="160"/>'
-        '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="999999"/></w:pBdr>'
-        '</w:pPr></w:p>';
-  }
-
-  /// A full-width bottom-bordered separator paragraph.
-  static String _rule() {
-    return '<w:p><w:pPr>'
-        '<w:pBdr><w:bottom w:val="single" w:sz="12" w:space="1" w:color="000000"/></w:pBdr>'
-        '</w:pPr></w:p>';
-  }
-
-  /// Inline image run (about 1.8in x 1.2in).
-  static String _imagePara(String rid, int id) {
-    const cx = 1828800;
-    const cy = 1219200;
+  static String _imagePara(String rid, int id, double wPt, double hPt) {
+    final cx = (wPt * 12700).round(); // pt -> EMU
+    final cy = (hPt * 12700).round();
     return '<w:p><w:r><w:drawing>'
         '<wp:inline distT="0" distB="0" distL="0" distR="0">'
         '<wp:extent cx="$cx" cy="$cy"/>'
@@ -212,12 +95,16 @@ class DocxExporter {
         '</wp:inline></w:drawing></w:r></w:p>';
   }
 
-  // ---- ZIP packaging -------------------------------------------------------
+  static String _hex(int argb) {
+    final r = ((argb >> 16) & 0xff).toRadixString(16).padLeft(2, '0');
+    final g = ((argb >> 8) & 0xff).toRadixString(16).padLeft(2, '0');
+    final b = (argb & 0xff).toRadixString(16).padLeft(2, '0');
+    return '$r$g$b';
+  }
 
   static Uint8List _zip(
-      TestPaper paper, String body, String imageRels, List<_Media> media) {
+      TestDocument doc, String body, String imageRels, List<_Media> media) {
     final archive = Archive();
-
     void addFile(String name, String content) {
       final bytes = utf8.encode(content);
       archive.addFile(ArchiveFile(name, bytes.length, bytes));
@@ -247,7 +134,7 @@ class DocxExporter {
         '</Relationships>');
 
     final sectPr = '<w:sectPr>'
-        '<w:pgSz w:w="${paper.size.docxWidthTwips}" w:h="${paper.size.docxHeightTwips}"/>'
+        '<w:pgSz w:w="${doc.size.docxWidthTwips}" w:h="${doc.size.docxHeightTwips}"/>'
         '<w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="0" w:footer="0" w:gutter="0"/>'
         '</w:sectPr>';
 
@@ -262,7 +149,8 @@ class DocxExporter {
         '<w:body>$body$sectPr</w:body></w:document>');
 
     for (final m in media) {
-      archive.addFile(ArchiveFile('word/media/${m.name}', m.bytes.length, m.bytes));
+      archive.addFile(
+          ArchiveFile('word/media/${m.name}', m.bytes.length, m.bytes));
     }
 
     final out = ZipEncoder().encode(archive) ?? <int>[];

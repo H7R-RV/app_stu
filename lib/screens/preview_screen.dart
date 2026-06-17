@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 
 import '../export/pdf_export.dart';
-import '../models/test_paper.dart';
+import '../models/document.dart';
 import '../theme/app_theme.dart';
 
-/// Shows the paper exactly as it will print, by rendering the real PDF.
+/// Shows the document exactly as it will print, by rendering the real PDF.
 class PreviewScreen extends StatelessWidget {
-  const PreviewScreen({super.key, required this.paper});
+  const PreviewScreen({super.key, required this.doc});
 
-  final TestPaper paper;
+  final TestDocument doc;
 
   @override
   Widget build(BuildContext context) {
@@ -23,11 +23,10 @@ class PreviewScreen extends StatelessWidget {
         ),
       ),
       body: PdfPreview(
-        build: (format) => PdfExporter.build(paper),
+        build: (format) => PdfExporter.build(doc),
         canChangePageFormat: false,
         canChangeOrientation: false,
         canDebug: false,
-        pdfFileName: '${paper.title}.pdf',
       ),
     );
   }

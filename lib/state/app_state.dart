@@ -1,11 +1,15 @@
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../data/question_bank.dart';
+import '../models/doc_element.dart';
+import '../models/document.dart';
+import '../models/page_size.dart';
 import '../models/question.dart';
-import '../models/test_paper.dart';
 
-/// Central store for the question bank and the paper being built.
+/// Central store for the canvas document plus the (read-only) question library.
 class AppState extends ChangeNotifier {
   AppState() {
     _bank = buildQuestionBank();
@@ -14,180 +18,257 @@ class AppState extends ChangeNotifier {
   static const _uuid = Uuid();
 
   late final List<Question> _bank;
-  final TestPaper paper = TestPaper();
+  final TestDocument doc = TestDocument();
 
+  int currentPage = 0;
+  String? selectedId;
+  String? editingId; // text element currently being edited
+
+  DocPage get page => doc.pages[currentPage.clamp(0, doc.pages.length - 1)];
+
+  DocElement? get selected {
+    for (final p in doc.pages) {
+      for (final e in p.elements) {
+        if (e.id == selectedId) return e;
+      }
+    }
+    return null;
+  }
+
+  // ---- Library -------------------------------------------------------------
   List<Question> get bank => List.unmodifiable(_bank);
 
   List<String> get subjects {
-    final set = <String>{for (final q in _bank) q.subject};
-    final list = set.toList()..sort();
-    return list;
+    final s = <String>{for (final q in _bank) q.subject}.toList()..sort();
+    return s;
   }
 
-  List<String> get grades {
-    final set = <String>{for (final q in _bank) q.grade};
-    final list = set.toList()..sort();
-    return list;
-  }
-
-  /// Filtered view of the bank used by the browser screen.
   List<Question> filteredBank({
     String? subject,
-    String? grade,
     QuestionType? type,
     String search = '',
   }) {
-    final query = search.trim().toLowerCase();
-    return _bank.where((q) {
-      if (subject != null && subject != 'All' && q.subject != subject) {
+    final q = search.trim().toLowerCase();
+    return _bank.where((e) {
+      if (subject != null && subject != 'All' && e.subject != subject) {
         return false;
       }
-      if (grade != null && grade != 'All' && q.grade != grade) return false;
-      if (type != null && q.type != type) return false;
-      if (query.isNotEmpty && !q.text.toLowerCase().contains(query)) {
-        return false;
-      }
+      if (type != null && e.type != type) return false;
+      if (q.isNotEmpty && !e.text.toLowerCase().contains(q)) return false;
       return true;
     }).toList();
   }
 
-  // ---- Paper editing -------------------------------------------------------
-
-  /// Bumped whenever the document structure changes, so inline editors can
-  /// rebuild with fresh values (keys include the revision).
-  int revision = 0;
-
-  /// The currently selected question (shows its editing controls).
-  String? selectedId;
-
+  // ---- Selection / editing -------------------------------------------------
   void select(String? id) {
-    if (selectedId == id) return;
+    if (selectedId == id && editingId == null) return;
     selectedId = id;
+    if (editingId != null && editingId != id) editingId = null;
     notifyListeners();
   }
 
-  /// Cycles an MCQ question between single-column / row / two-column layouts.
-  void cycleMcqLayout(Question q) {
-    const order = McqLayout.values;
-    q.mcqLayout = order[(q.mcqLayout.index + 1) % order.length];
-    _structural();
-  }
-
-  void _structural() {
-    revision++;
+  void startEditing(String id) {
+    selectedId = id;
+    editingId = id;
     notifyListeners();
   }
 
-  int _clampIndex(int index) =>
-      index.clamp(0, paper.questions.length).toInt();
-
-  /// Adds a fresh copy of a bank question to the paper.
-  void addToPaper(Question source) {
-    paper.questions.add(source.copyWith(id: _uuid.v4()));
-    _structural();
+  void stopEditing() {
+    if (editingId == null) return;
+    editingId = null;
+    notifyListeners();
   }
 
-  /// Inserts a copy of a bank question at a specific position (drag & drop).
-  void addAt(Question source, int index) {
-    paper.questions.insert(_clampIndex(index), source.copyWith(id: _uuid.v4()));
-    _structural();
+  /// Call after mutating a selected element's properties.
+  void touch() => notifyListeners();
+
+  // ---- Element creation ----------------------------------------------------
+  double get _pw => doc.size.ptWidth;
+
+  void _add(DocElement e) {
+    page.elements.add(e);
+    selectedId = e.id;
+    editingId = null;
+    notifyListeners();
   }
 
-  /// Moves an already-placed question so it lands at [index] (drop below).
-  void moveTo(String id, int index) {
-    final from = paper.questions.indexWhere((q) => q.id == id);
-    if (from == -1) return;
-    var to = _clampIndex(index);
-    final item = paper.questions.removeAt(from);
-    if (from < to) to -= 1;
-    paper.questions.insert(to.clamp(0, paper.questions.length), item);
-    _structural();
-  }
+  double _cx(double w) => ((_pw - w) / 2).clamp(0, _pw);
 
-  /// Reorders the option list of an MCQ-style question.
-  void reorderOptions(Question q, int oldIndex, int newIndex) {
-    if (newIndex > oldIndex) newIndex -= 1;
-    final item = q.options.removeAt(oldIndex);
-    q.options.insert(newIndex, item);
-    if (q.correctOption == oldIndex) {
-      q.correctOption = newIndex;
-    } else if (q.correctOption != null) {
-      // keep the same logical answer highlighted after a move
-    }
-    _structural();
-  }
-
-  /// Adds a brand-new empty question of [type] for manual authoring.
-  /// When [index] is given the question is inserted at that position.
-  Question addBlank(QuestionType type, {int? index}) {
-    final q = Question(
+  void addText({String text = 'Double-tap to edit', double fontSize = 16, bool bold = false}) {
+    _add(DocElement(
       id: _uuid.v4(),
-      type: type,
-      subject: paper.subject,
-      grade: paper.grade,
-      text: '',
-      options: type == QuestionType.mcq ? ['', '', '', ''] : const [],
-      wordBank:
-          type == QuestionType.fillBlankWithOptions ? ['', '', ''] : const [],
-      pairs: type == QuestionType.columnMatch
-          ? [MatchPair(left: '', right: ''), MatchPair(left: '', right: '')]
-          : null,
-      isTrue: type == QuestionType.trueFalse ? true : null,
-      marks: type == QuestionType.longQuestion ? 5 : 1,
-    );
-    paper.questions.insert(index == null ? paper.questions.length : _clampIndex(index), q);
-    _structural();
-    return q;
+      type: ElementType.text,
+      x: _cx(260),
+      y: 90,
+      w: 260,
+      h: fontSize * 1.8 + 8,
+      text: text,
+      fontSize: fontSize,
+      bold: bold,
+    ));
   }
 
-  void removeFromPaper(String id) {
-    paper.questions.removeWhere((q) => q.id == id);
-    _structural();
+  void addHeading() =>
+      addText(text: 'Heading', fontSize: 30, bold: true);
+
+  void addImage(Uint8List bytes, {double aspect = 1}) {
+    const w = 200.0;
+    _add(DocElement(
+      id: _uuid.v4(),
+      type: ElementType.image,
+      x: _cx(w),
+      y: 90,
+      w: w,
+      h: w / (aspect == 0 ? 1 : aspect),
+      imageBytes: bytes,
+    ));
+  }
+
+  void addRect() {
+    _add(DocElement(
+      id: _uuid.v4(),
+      type: ElementType.rect,
+      x: _cx(180),
+      y: 100,
+      w: 180,
+      h: 110,
+      fill: 0xFFE3E7FF,
+      strokeColor: 0xFF4F46E5,
+      strokeWidth: 1,
+    ));
+  }
+
+  void addEllipse() {
+    _add(DocElement(
+      id: _uuid.v4(),
+      type: ElementType.ellipse,
+      x: _cx(150),
+      y: 100,
+      w: 150,
+      h: 150,
+      fill: 0xFFFFE3EC,
+      strokeColor: 0xFFEC4899,
+      strokeWidth: 1,
+    ));
+  }
+
+  void addLine() {
+    _add(DocElement(
+      id: _uuid.v4(),
+      type: ElementType.line,
+      x: _cx(240),
+      y: 120,
+      w: 240,
+      h: 2,
+      strokeColor: 0xFF111111,
+      strokeWidth: 2,
+    ));
+  }
+
+  /// Inserts a question from the library as a pre-formatted text block.
+  void addFromQuestion(Question q) {
+    final buffer = StringBuffer(q.text);
+    switch (q.type) {
+      case QuestionType.mcq:
+        for (var i = 0; i < q.options.length; i++) {
+          buffer.write('\n   (${String.fromCharCode(65 + i)}) ${q.options[i]}');
+        }
+        break;
+      case QuestionType.trueFalse:
+        buffer.write('\n   (   ) True     (   ) False');
+        break;
+      case QuestionType.fillBlankWithOptions:
+        buffer.write('\n   [ ${q.wordBank.join('   ')} ]');
+        break;
+      case QuestionType.columnMatch:
+        for (var i = 0; i < q.pairs.length; i++) {
+          buffer.write(
+              '\n   ${i + 1}. ${q.pairs[i].left}        (${String.fromCharCode(97 + i)}) ${q.pairs[i].right}');
+        }
+        break;
+      case QuestionType.shortQuestion:
+      case QuestionType.longQuestion:
+      case QuestionType.fillBlank:
+      case QuestionType.preschoolImage:
+        break;
+    }
+    const w = 460.0;
+    final lines = '\n'.allMatches(buffer.toString()).length + 1;
+    _add(DocElement(
+      id: _uuid.v4(),
+      type: ElementType.text,
+      x: _cx(w),
+      y: 100,
+      w: w,
+      h: lines * 20.0 + 10,
+      text: buffer.toString(),
+      fontSize: 13,
+    ));
+  }
+
+  // ---- Element ops ---------------------------------------------------------
+  void delete(String id) {
+    for (final p in doc.pages) {
+      p.elements.removeWhere((e) => e.id == id);
+    }
+    if (selectedId == id) selectedId = null;
+    if (editingId == id) editingId = null;
+    notifyListeners();
   }
 
   void duplicate(String id) {
-    final index = paper.questions.indexWhere((q) => q.id == id);
-    if (index == -1) return;
-    paper.questions
-        .insert(index + 1, paper.questions[index].copyWith(id: _uuid.v4()));
-    _structural();
-  }
-
-  void reorder(int oldIndex, int newIndex) {
-    if (newIndex > oldIndex) newIndex -= 1;
-    final item = paper.questions.removeAt(oldIndex);
-    paper.questions.insert(newIndex, item);
-    _structural();
-  }
-
-  void clearPaper() {
-    paper.questions.clear();
-    _structural();
-  }
-
-  /// Adds a curated mix of questions so the user instantly has a full paper.
-  void quickFill({String? subject, String? grade}) {
-    final pool = filteredBank(subject: subject, grade: grade);
-    if (pool.isEmpty) return;
-    final byType = <QuestionType, List<Question>>{};
-    for (final q in pool) {
-      byType.putIfAbsent(q.type, () => []).add(q);
-    }
-    paper.questions.clear();
-    for (final entry in byType.entries) {
-      for (final q in entry.value.take(4)) {
-        paper.questions.add(q.copyWith(id: _uuid.v4()));
+    for (final p in doc.pages) {
+      final i = p.elements.indexWhere((e) => e.id == id);
+      if (i != -1) {
+        final copy = p.elements[i].copy(id: _uuid.v4());
+        p.elements.add(copy);
+        selectedId = copy.id;
+        notifyListeners();
+        return;
       }
     }
-    _structural();
   }
 
-  /// Re-flows the pages after free-text edits (no key bump, keeps focus calm).
-  void reflow() => notifyListeners();
+  void _reorder(String id, bool forward) {
+    for (final p in doc.pages) {
+      final i = p.elements.indexWhere((e) => e.id == id);
+      if (i == -1) continue;
+      final ni = forward ? i + 1 : i - 1;
+      if (ni < 0 || ni >= p.elements.length) return;
+      final e = p.elements.removeAt(i);
+      p.elements.insert(ni, e);
+      notifyListeners();
+      return;
+    }
+  }
 
-  /// Notifies listeners after an in-place edit of a paper question.
-  void touch() => notifyListeners();
+  void bringForward(String id) => _reorder(id, true);
+  void sendBackward(String id) => _reorder(id, false);
 
-  /// A header / option toggle changed — re-render and re-flow.
-  void updatePaperHeader() => _structural();
+  // ---- Pages ---------------------------------------------------------------
+  void addPage() {
+    doc.pages.add(DocPage());
+    currentPage = doc.pages.length - 1;
+    selectedId = null;
+    notifyListeners();
+  }
+
+  void deletePage(int index) {
+    if (doc.pages.length <= 1) return;
+    doc.pages.removeAt(index);
+    currentPage = currentPage.clamp(0, doc.pages.length - 1);
+    selectedId = null;
+    notifyListeners();
+  }
+
+  void setCurrentPage(int index) {
+    currentPage = index.clamp(0, doc.pages.length - 1);
+    selectedId = null;
+    notifyListeners();
+  }
+
+  void setSize(PaperSize size) {
+    doc.size = size;
+    notifyListeners();
+  }
 }

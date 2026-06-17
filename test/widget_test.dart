@@ -4,39 +4,59 @@ import 'package:simple_demo/data/question_bank.dart';
 import 'package:simple_demo/export/docx_export.dart';
 import 'package:simple_demo/export/pdf_export.dart';
 import 'package:simple_demo/main.dart';
-import 'package:simple_demo/models/test_paper.dart';
+import 'package:simple_demo/models/doc_element.dart';
+import 'package:simple_demo/models/document.dart';
+
+TestDocument _sampleDoc() {
+  final doc = TestDocument();
+  doc.pages.first.elements.addAll([
+    DocElement(
+        id: 't1',
+        type: ElementType.text,
+        x: 40,
+        y: 40,
+        w: 400,
+        h: 30,
+        text: 'Sample Heading',
+        fontSize: 22,
+        bold: true),
+    DocElement(
+        id: 'r1', type: ElementType.rect, x: 40, y: 90, w: 200, h: 60, fill: 0xFFE3E7FF),
+    DocElement(
+        id: 't2',
+        type: ElementType.text,
+        x: 40,
+        y: 160,
+        w: 400,
+        h: 60,
+        text: 'Q1. What is 2 + 2?\n(A) 3  (B) 4  (C) 5'),
+  ]);
+  return doc;
+}
 
 void main() {
-  testWidgets('App boots and shows the builder', (WidgetTester tester) async {
+  testWidgets('App boots and shows the canvas toolbar',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const TestGeneratorApp());
-    // Avoid pumpAndSettle: the empty-state hint uses a repeating animation.
-    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('Test Generator'), findsOneWidget);
-    expect(find.text('Add question'), findsOneWidget);
+    expect(find.text('Canva Test Designer'), findsOneWidget);
+    expect(find.text('Text'), findsWidgets);
   });
 
-  test('Question bank is populated with many questions', () {
-    final bank = buildQuestionBank();
-    expect(bank.length, greaterThan(80));
+  test('Question library is populated', () {
+    expect(buildQuestionBank().length, greaterThan(80));
   });
 
   test('PDF export produces a non-empty document', () async {
-    final paper = TestPaper();
-    final bank = buildQuestionBank();
-    paper.questions.addAll(bank.take(12).map((q) => q.copyWith()));
-    final bytes = await PdfExporter.build(paper);
-    expect(bytes.lengthInBytes, greaterThan(500));
+    final bytes = await PdfExporter.build(_sampleDoc());
+    expect(bytes.lengthInBytes, greaterThan(400));
   });
 
   test('DOCX export produces a valid zip package', () {
-    final paper = TestPaper();
-    final bank = buildQuestionBank();
-    paper.questions.addAll(bank.take(12).map((q) => q.copyWith()));
-    final bytes = DocxExporter.build(paper);
-    // ZIP packages start with the "PK" magic bytes.
-    expect(bytes[0], 0x50);
-    expect(bytes[1], 0x4B);
+    final bytes = DocxExporter.build(_sampleDoc());
+    expect(bytes[0], 0x50); // 'P'
+    expect(bytes[1], 0x4B); // 'K'
     expect(bytes.lengthInBytes, greaterThan(300));
   });
 }
