@@ -1,5 +1,5 @@
 name: simple_demo
-description: "A new Flutter project."
+description: "Test Generator - build, customize and export exam papers."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -34,6 +34,27 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+
+  # State management
+  provider: ^6.1.2
+
+  # PDF generation + print/share/preview
+  pdf: ^3.11.1
+  printing: ^5.13.4
+
+  # MS Word (.docx) generation is built manually as an OOXML zip
+  archive: ^3.6.1
+
+  # File system + sharing + opening exported files
+  path_provider: ^2.1.4
+  share_plus: ^10.1.2
+  open_filex: ^4.5.0
+
+  # Attach images to questions (preschool / diagram questions)
+  image_picker: ^1.1.2
+
+  # Unique ids for placed questions
+  uuid: ^4.5.1
 
 dev_dependencies:
   flutter_test:
