@@ -30,19 +30,31 @@ class DocxExporter {
     }
 
     // ---- Header ----
-    body.write(_para(paper.schoolName,
-        bold: true, size: 32, align: 'center'));
-    body.write(_para(paper.title, bold: true, size: 26, align: 'center'));
-    body.write(_para(
-        'Subject: ${paper.subject}\t\tClass: ${paper.grade}',
-        size: 22));
-    body.write(_para(
-        'Time: ${paper.timeAllowed}\t\tTotal Marks: ${paper.totalMarks}',
-        size: 22));
+    final c = paper.header;
+    if (c.showSchool) {
+      body.write(_para(paper.schoolName, bold: true, size: 32, align: 'center'));
+    }
+    if (c.showTitle) {
+      body.write(_para(paper.title, bold: true, size: 26, align: 'center'));
+    }
+    final meta1 = [
+      if (c.showSubject) 'Subject: ${paper.subject}',
+      if (c.showClass) 'Class: ${paper.grade}',
+    ];
+    final meta2 = [
+      if (c.showTime) 'Time: ${paper.timeAllowed}',
+      if (c.showMarks) 'Total Marks: ${paper.totalMarks}',
+    ];
+    if (meta1.isNotEmpty) body.write(_para(meta1.join('\t\t'), size: 22));
+    if (meta2.isNotEmpty) body.write(_para(meta2.join('\t\t'), size: 22));
     body.write(_rule());
-    body.write(_para('Name: ____________________     Roll No: __________',
-        size: 22));
-    if (paper.instructions.trim().isNotEmpty) {
+    final student = [
+      if (c.showName) 'Name: ____________________',
+      if (c.showRoll) 'Roll No: __________',
+      if (c.showDate) 'Date: ${c.date.isEmpty ? '__________' : c.date}',
+    ];
+    if (student.isNotEmpty) body.write(_para(student.join('     '), size: 22));
+    if (c.showInstructions && paper.instructions.trim().isNotEmpty) {
       body.write(_para('Instructions: ${paper.instructions}',
           italic: true, size: 20));
     }

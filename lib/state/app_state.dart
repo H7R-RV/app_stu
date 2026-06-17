@@ -53,14 +53,57 @@ class AppState extends ChangeNotifier {
 
   // ---- Paper editing -------------------------------------------------------
 
-  /// Adds a fresh copy of a bank question to the paper.
-  void addToPaper(Question source) {
-    paper.questions.add(source.copyWith(id: _uuid.v4()));
+  /// Bumped whenever the document structure changes, so inline editors can
+  /// rebuild with fresh values (keys include the revision).
+  int revision = 0;
+
+  void _structural() {
+    revision++;
     notifyListeners();
   }
 
+  int _clampIndex(int index) =>
+      index.clamp(0, paper.questions.length).toInt();
+
+  /// Adds a fresh copy of a bank question to the paper.
+  void addToPaper(Question source) {
+    paper.questions.add(source.copyWith(id: _uuid.v4()));
+    _structural();
+  }
+
+  /// Inserts a copy of a bank question at a specific position (drag & drop).
+  void addAt(Question source, int index) {
+    paper.questions.insert(_clampIndex(index), source.copyWith(id: _uuid.v4()));
+    _structural();
+  }
+
+  /// Moves an already-placed question so it lands at [index] (drop below).
+  void moveTo(String id, int index) {
+    final from = paper.questions.indexWhere((q) => q.id == id);
+    if (from == -1) return;
+    var to = _clampIndex(index);
+    final item = paper.questions.removeAt(from);
+    if (from < to) to -= 1;
+    paper.questions.insert(to.clamp(0, paper.questions.length), item);
+    _structural();
+  }
+
+  /// Reorders the option list of an MCQ-style question.
+  void reorderOptions(Question q, int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex -= 1;
+    final item = q.options.removeAt(oldIndex);
+    q.options.insert(newIndex, item);
+    if (q.correctOption == oldIndex) {
+      q.correctOption = newIndex;
+    } else if (q.correctOption != null) {
+      // keep the same logical answer highlighted after a move
+    }
+    _structural();
+  }
+
   /// Adds a brand-new empty question of [type] for manual authoring.
-  Question addBlank(QuestionType type) {
+  /// When [index] is given the question is inserted at that position.
+  Question addBlank(QuestionType type, {int? index}) {
     final q = Question(
       id: _uuid.v4(),
       type: type,
@@ -76,14 +119,14 @@ class AppState extends ChangeNotifier {
       isTrue: type == QuestionType.trueFalse ? true : null,
       marks: type == QuestionType.longQuestion ? 5 : 1,
     );
-    paper.questions.add(q);
-    notifyListeners();
+    paper.questions.insert(index == null ? paper.questions.length : _clampIndex(index), q);
+    _structural();
     return q;
   }
 
   void removeFromPaper(String id) {
     paper.questions.removeWhere((q) => q.id == id);
-    notifyListeners();
+    _structural();
   }
 
   void duplicate(String id) {
@@ -91,19 +134,19 @@ class AppState extends ChangeNotifier {
     if (index == -1) return;
     paper.questions
         .insert(index + 1, paper.questions[index].copyWith(id: _uuid.v4()));
-    notifyListeners();
+    _structural();
   }
 
   void reorder(int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex -= 1;
     final item = paper.questions.removeAt(oldIndex);
     paper.questions.insert(newIndex, item);
-    notifyListeners();
+    _structural();
   }
 
   void clearPaper() {
     paper.questions.clear();
-    notifyListeners();
+    _structural();
   }
 
   /// Adds a curated mix of questions so the user instantly has a full paper.
@@ -120,11 +163,15 @@ class AppState extends ChangeNotifier {
         paper.questions.add(q.copyWith(id: _uuid.v4()));
       }
     }
-    notifyListeners();
+    _structural();
   }
+
+  /// Re-flows the pages after free-text edits (no key bump, keeps focus calm).
+  void reflow() => notifyListeners();
 
   /// Notifies listeners after an in-place edit of a paper question.
   void touch() => notifyListeners();
 
-  void updatePaperHeader() => notifyListeners();
+  /// A header / option toggle changed — re-render and re-flow.
+  void updatePaperHeader() => _structural();
 }

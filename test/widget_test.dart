@@ -9,7 +9,8 @@ import 'package:simple_demo/models/test_paper.dart';
 void main() {
   testWidgets('App boots and shows the builder', (WidgetTester tester) async {
     await tester.pumpWidget(const TestGeneratorApp());
-    await tester.pumpAndSettle();
+    // Avoid pumpAndSettle: the empty-state hint uses a repeating animation.
+    await tester.pump(const Duration(milliseconds: 600));
 
     expect(find.text('Test Generator'), findsOneWidget);
     expect(find.text('Add question'), findsOneWidget);

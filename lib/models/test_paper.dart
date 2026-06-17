@@ -1,5 +1,6 @@
 import 'package:pdf/pdf.dart';
 
+import 'header_config.dart';
 import 'question.dart';
 
 /// Supported page sizes shown in the builder and used for export.
@@ -33,16 +34,31 @@ extension PaperSizeInfo on PaperSize {
   }
 
   /// Width / height ratio used to draw the on-screen page preview.
-  double get aspectRatio {
+  double get aspectRatio => widthMm / heightMm;
+
+  double get widthMm {
     switch (this) {
       case PaperSize.a4:
-        return 210 / 297;
+        return 210;
       case PaperSize.a5:
-        return 148 / 210;
+        return 148;
       case PaperSize.letter:
-        return 8.5 / 11;
+        return 215.9;
       case PaperSize.legal:
-        return 8.5 / 14;
+        return 215.9;
+    }
+  }
+
+  double get heightMm {
+    switch (this) {
+      case PaperSize.a4:
+        return 297;
+      case PaperSize.a5:
+        return 210;
+      case PaperSize.letter:
+        return 279.4;
+      case PaperSize.legal:
+        return 355.6;
     }
   }
 
@@ -101,6 +117,13 @@ class TestPaper {
       'Attempt all questions. Write neatly. Marks are given against each question.';
   PaperSize size = PaperSize.a4;
   bool showAnswerKey = false;
+
+  /// Page margin and inner content padding, in millimetres.
+  double marginMm = 16;
+  double paddingMm = 6;
+
+  /// Editable header configuration / toggles.
+  final HeaderConfig header = HeaderConfig();
 
   /// The ordered list of questions placed on the paper.
   final List<Question> questions = [];

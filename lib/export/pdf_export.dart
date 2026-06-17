@@ -49,25 +49,41 @@ class PdfExporter {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [pw.Text(asciiSafe(l)), pw.Text(asciiSafe(r))],
         );
+    final c = paper.header;
+    final meta1 = <String>[
+      if (c.showSubject) 'Subject: ${paper.subject}',
+      if (c.showClass) 'Class: ${paper.grade}',
+    ];
+    final meta2 = <String>[
+      if (c.showTime) 'Time: ${paper.timeAllowed}',
+      if (c.showMarks) 'Total Marks: ${paper.totalMarks}',
+    ];
+    final student = <String>[
+      if (c.showName) 'Name: ____________________',
+      if (c.showRoll) 'Roll No: __________',
+      if (c.showDate) 'Date: ${c.date.isEmpty ? '__________' : c.date}',
+    ];
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
-        pw.Center(
-          child: pw.Text(asciiSafe(paper.schoolName),
-              style:
-                  pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-        ),
-        pw.Center(
-          child: pw.Text(asciiSafe(paper.title),
-              style:
-                  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-        ),
+        if (c.showSchool)
+          pw.Center(
+            child: pw.Text(asciiSafe(paper.schoolName),
+                style: pw.TextStyle(
+                    fontSize: 18, fontWeight: pw.FontWeight.bold)),
+          ),
+        if (c.showTitle)
+          pw.Center(
+            child: pw.Text(asciiSafe(paper.title),
+                style: pw.TextStyle(
+                    fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          ),
         pw.SizedBox(height: 6),
-        line('Subject: ${paper.subject}', 'Class: ${paper.grade}'),
-        line('Time: ${paper.timeAllowed}', 'Total Marks: ${paper.totalMarks}'),
+        if (meta1.isNotEmpty) line(meta1.first, meta1.length > 1 ? meta1[1] : ''),
+        if (meta2.isNotEmpty) line(meta2.first, meta2.length > 1 ? meta2[1] : ''),
         pw.Divider(thickness: 1),
-        pw.Text('Name: ____________________      Roll No: __________'),
-        if (paper.instructions.trim().isNotEmpty)
+        if (student.isNotEmpty) pw.Text(student.join('      ')),
+        if (c.showInstructions && paper.instructions.trim().isNotEmpty)
           pw.Padding(
             padding: const pw.EdgeInsets.only(top: 4),
             child: pw.Text('Instructions: ${asciiSafe(paper.instructions)}',
