@@ -46,6 +46,7 @@ class Inspector extends StatelessWidget {
                 min: -180,
                 max: 180,
                 value: e.rotation.clamp(-180, 180),
+                onChangeStart: (_) => state.record(),
                 onChanged: (v) {
                   e.rotation = v;
                   state.touch();
@@ -56,6 +57,7 @@ class Inspector extends StatelessWidget {
                 min: 0.1,
                 max: 1,
                 value: e.opacity.clamp(0.1, 1),
+                onChangeStart: (_) => state.record(),
                 onChanged: (v) {
                   e.opacity = v;
                   state.touch();
@@ -137,6 +139,7 @@ class Inspector extends StatelessWidget {
               min: 6,
               max: 96,
               value: e.fontSize.clamp(6, 96),
+              onChangeStart: (_) => state.record(),
               onChanged: (v) {
                 e.fontSize = v;
                 state.touch();
@@ -174,7 +177,19 @@ class Inspector extends StatelessWidget {
           }),
         ],
       ),
-      const SizedBox(height: 10),
+      const SizedBox(height: 6),
+      _label('Letter spacing ${e.letterSpacing.toStringAsFixed(1)}'),
+      Slider(
+        min: -2,
+        max: 12,
+        value: e.letterSpacing.clamp(-2, 12),
+        onChangeStart: (_) => state.record(),
+        onChanged: (v) {
+          e.letterSpacing = v;
+          state.touch();
+        },
+      ),
+      const SizedBox(height: 6),
       _label('Text colour'),
       _swatches(e.color, (c) {
         e.color = c;

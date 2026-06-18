@@ -46,7 +46,12 @@ class ElementView extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: () => state.select(e.id),
       onDoubleTap: e.isText ? () => state.startEditing(e.id) : null,
-      onPanStart: editing ? null : (_) => state.select(e.id),
+      onPanStart: editing
+          ? null
+          : (_) {
+              state.select(e.id);
+              state.record();
+            },
       onPanUpdate: editing
           ? null
           : (d) {
@@ -93,6 +98,7 @@ class ElementView extends StatelessWidget {
                 right: -7,
                 bottom: -7,
                 icon: Icons.open_in_full,
+                onStart: state.record,
                 onPan: (d) {
                   e.w = math.max(20, e.w + d.delta.dx / scale);
                   e.h = math.max(10, e.h + d.delta.dy / scale);
@@ -167,11 +173,13 @@ class ElementView extends StatelessWidget {
     double? bottom,
     required IconData icon,
     required void Function(DragUpdateDetails) onPan,
+    VoidCallback? onStart,
   }) {
     return Positioned(
       right: right,
       bottom: bottom,
       child: GestureDetector(
+        onPanStart: onStart == null ? null : (_) => onStart(),
         onPanUpdate: onPan,
         child: Container(
           width: 18,
@@ -209,6 +217,7 @@ TextStyle _textStyle(DocElement e, double scale) {
     fontWeight: e.bold ? FontWeight.bold : FontWeight.normal,
     fontStyle: e.italic ? FontStyle.italic : FontStyle.normal,
     decoration: e.underline ? TextDecoration.underline : TextDecoration.none,
+    letterSpacing: e.letterSpacing * scale,
     height: 1.2,
   );
 }

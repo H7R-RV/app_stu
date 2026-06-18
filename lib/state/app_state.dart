@@ -1,7 +1,10 @@
 import 'dart:typed_data';
 
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show TextAlign;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../data/question_bank.dart';
@@ -9,6 +12,14 @@ import '../models/doc_element.dart';
 import '../models/document.dart';
 import '../models/page_size.dart';
 import '../models/question.dart';
+
+/// A paper saved in the Library.
+class SavedPaper {
+  SavedPaper(this.id, this.name, this.date);
+  final String id;
+  final String name;
+  final String date;
+}
 
 /// Central store for the canvas document plus the (read-only) question library.
 class AppState extends ChangeNotifier {
@@ -24,6 +35,72 @@ class AppState extends ChangeNotifier {
   int currentPage = 0;
   String? selectedId;
   String? editingId; // text element currently being edited
+
+  // ---- Draw tool ----
+  bool drawMode = false;
+  int drawColor = 0xFF111111;
+  double drawWidth = 3;
+  bool eraser = false;
+
+  void setDrawMode(bool v) {
+    drawMode = v;
+    if (v) selectedId = null;
+    notifyListeners();
+  }
+
+  void setDrawColor(int c) {
+    drawColor = c;
+    eraser = false;
+    notifyListeners();
+  }
+
+  void setDrawWidth(double w) {
+    drawWidth = w;
+    notifyListeners();
+  }
+
+  void setEraser(bool v) {
+    eraser = v;
+    notifyListeners();
+  }
+
+  void addStroke(Stroke s) {
+    record();
+    page.strokes.add(s);
+    notifyListeners();
+  }
+
+  // ---- Undo / Redo (memento) ----
+  final List<String> _undo = [];
+  final List<String> _redo = [];
+
+  bool get canUndo => _undo.isNotEmpty;
+  bool get canRedo => _redo.isNotEmpty;
+
+  /// Snapshot the current document BEFORE a mutation.
+  void record() {
+    _undo.add(doc.encode());
+    if (_undo.length > 60) _undo.removeAt(0);
+    _redo.clear();
+  }
+
+  void undo() {
+    if (_undo.isEmpty) return;
+    _redo.add(doc.encode());
+    doc.loadFrom(jsonDecode(_undo.removeLast()) as Map<String, dynamic>);
+    selectedId = null;
+    editingId = null;
+    notifyListeners();
+  }
+
+  void redo() {
+    if (_redo.isEmpty) return;
+    _undo.add(doc.encode());
+    doc.loadFrom(jsonDecode(_redo.removeLast()) as Map<String, dynamic>);
+    selectedId = null;
+    editingId = null;
+    notifyListeners();
+  }
 
   DocPage get page => doc.pages[currentPage.clamp(0, doc.pages.length - 1)];
 
@@ -92,6 +169,7 @@ class AppState extends ChangeNotifier {
   double get _pw => doc.size.ptWidth;
 
   void _add(DocElement e) {
+    record();
     page.elements.add(e);
     selectedId = e.id;
     editingId = null;
@@ -273,6 +351,7 @@ class AppState extends ChangeNotifier {
             y: 115, x: margin + 8, size: 14, bold: true, color: 0xFFFFFFFF));
         break;
     }
+    record();
     page.elements.addAll(added);
     selectedId = added.isNotEmpty ? added.last.id : selectedId;
     editingId = null;
@@ -322,6 +401,7 @@ class AppState extends ChangeNotifier {
 
   // ---- Element ops ---------------------------------------------------------
   void delete(String id) {
+    record();
     for (final p in doc.pages) {
       p.elements.removeWhere((e) => e.id == id);
     }
@@ -334,6 +414,7 @@ class AppState extends ChangeNotifier {
     for (final p in doc.pages) {
       final i = p.elements.indexWhere((e) => e.id == id);
       if (i != -1) {
+        record();
         final copy = p.elements[i].copy(id: _uuid.v4());
         p.elements.add(copy);
         selectedId = copy.id;
@@ -349,6 +430,7 @@ class AppState extends ChangeNotifier {
       if (i == -1) continue;
       final ni = forward ? i + 1 : i - 1;
       if (ni < 0 || ni >= p.elements.length) return;
+      record();
       final e = p.elements.removeAt(i);
       p.elements.insert(ni, e);
       notifyListeners();
@@ -361,6 +443,7 @@ class AppState extends ChangeNotifier {
 
   // ---- Pages ---------------------------------------------------------------
   void addPage() {
+    record();
     doc.pages.add(DocPage());
     currentPage = doc.pages.length - 1;
     selectedId = null;
@@ -369,6 +452,7 @@ class AppState extends ChangeNotifier {
 
   void deletePage(int index) {
     if (doc.pages.length <= 1) return;
+    record();
     doc.pages.removeAt(index);
     currentPage = currentPage.clamp(0, doc.pages.length - 1);
     selectedId = null;
@@ -382,7 +466,62 @@ class AppState extends ChangeNotifier {
   }
 
   void setSize(PaperSize size) {
+    record();
     doc.size = size;
     notifyListeners();
+  }
+
+  // ---- Margins / Header / Footer (Design) ----------------------------------
+  void setMargins({double? top, double? right, double? bottom, double? left}) {
+    doc.marginTop = top ?? doc.marginTop;
+    doc.marginRight = right ?? doc.marginRight;
+    doc.marginBottom = bottom ?? doc.marginBottom;
+    doc.marginLeft = left ?? doc.marginLeft;
+    notifyListeners();
+  }
+
+  void updateDesign() => notifyListeners();
+
+  // ---- Library (persistence) -----------------------------------------------
+  static const _indexKey = 'library_index';
+
+  Future<List<SavedPaper>> listLibrary() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(_indexKey) ?? [];
+    return [
+      for (final r in raw)
+        if (r.split('|').length >= 3)
+          SavedPaper(r.split('|')[0], r.split('|')[1], r.split('|')[2]),
+    ].reversed.toList();
+  }
+
+  Future<void> saveToLibrary(String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    final id = _uuid.v4();
+    final date = DateTime.now().toIso8601String().substring(0, 16).replaceAll('T', ' ');
+    await prefs.setString('paper_$id', doc.encode());
+    final index = prefs.getStringList(_indexKey) ?? [];
+    index.add('$id|${name.replaceAll('|', ' ')}|$date');
+    await prefs.setStringList(_indexKey, index);
+  }
+
+  Future<void> loadFromLibrary(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString('paper_$id');
+    if (data == null) return;
+    record();
+    doc.loadFrom(jsonDecode(data) as Map<String, dynamic>);
+    currentPage = 0;
+    selectedId = null;
+    editingId = null;
+    notifyListeners();
+  }
+
+  Future<void> deleteFromLibrary(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('paper_$id');
+    final index = prefs.getStringList(_indexKey) ?? [];
+    index.removeWhere((r) => r.startsWith('$id|'));
+    await prefs.setStringList(_indexKey, index);
   }
 }

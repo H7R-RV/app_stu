@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -68,6 +69,7 @@ class DocElement {
     this.italic = false,
     this.underline = false,
     this.align = TextAlign.left,
+    this.letterSpacing = 0,
     this.fill,
     this.strokeColor = 0xFF111111,
     this.strokeWidth = 0,
@@ -94,6 +96,7 @@ class DocElement {
   bool italic;
   bool underline;
   TextAlign align;
+  double letterSpacing;
 
   // Fill / stroke (shapes, or text background when [fill] != null)
   int? fill; // ARGB
@@ -136,6 +139,94 @@ class DocElement {
       opacity: opacity,
       imageBytes: imageBytes,
       shape: shape,
+      letterSpacing: letterSpacing,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        't': type.index,
+        'x': x,
+        'y': y,
+        'w': w,
+        'h': h,
+        'r': rotation,
+        'tx': text,
+        'ff': fontFamily,
+        'fs': fontSize,
+        'c': color,
+        'b': bold,
+        'i': italic,
+        'u': underline,
+        'al': align.index,
+        'ls': letterSpacing,
+        'fl': fill,
+        'sc': strokeColor,
+        'sw': strokeWidth,
+        'op': opacity,
+        'sh': shape.index,
+        'img': imageBytes == null ? null : base64Encode(imageBytes!),
+      };
+
+  factory DocElement.fromJson(Map<String, dynamic> j) => DocElement(
+        id: j['id'] as String,
+        type: ElementType.values[j['t'] as int],
+        x: (j['x'] as num).toDouble(),
+        y: (j['y'] as num).toDouble(),
+        w: (j['w'] as num).toDouble(),
+        h: (j['h'] as num).toDouble(),
+        rotation: (j['r'] as num?)?.toDouble() ?? 0,
+        text: j['tx'] as String? ?? '',
+        fontFamily: j['ff'] as String? ?? 'Lato',
+        fontSize: (j['fs'] as num?)?.toDouble() ?? 16,
+        color: j['c'] as int? ?? 0xFF111111,
+        bold: j['b'] as bool? ?? false,
+        italic: j['i'] as bool? ?? false,
+        underline: j['u'] as bool? ?? false,
+        align: TextAlign.values[j['al'] as int? ?? 0],
+        letterSpacing: (j['ls'] as num?)?.toDouble() ?? 0,
+        fill: j['fl'] as int?,
+        strokeColor: j['sc'] as int? ?? 0xFF111111,
+        strokeWidth: (j['sw'] as num?)?.toDouble() ?? 0,
+        opacity: (j['op'] as num?)?.toDouble() ?? 1,
+        shape: ShapeKind.values[j['sh'] as int? ?? 0],
+        imageBytes:
+            j['img'] == null ? null : base64Decode(j['img'] as String),
+      );
+}
+
+/// One freehand pen stroke drawn with the Draw tool (points in PDF points).
+class Stroke {
+  Stroke({
+    required this.color,
+    required this.width,
+    this.eraser = false,
+    List<Offset>? points,
+  }) : points = points ?? [];
+
+  final int color;
+  final double width;
+  final bool eraser;
+  final List<Offset> points;
+
+  Map<String, dynamic> toJson() => {
+        'c': color,
+        'w': width,
+        'e': eraser,
+        'p': [for (final o in points) ...[o.dx, o.dy]],
+      };
+
+  factory Stroke.fromJson(Map<String, dynamic> j) {
+    final flat = (j['p'] as List).cast<num>();
+    final pts = <Offset>[];
+    for (var i = 0; i + 1 < flat.length; i += 2) {
+      pts.add(Offset(flat[i].toDouble(), flat[i + 1].toDouble()));
+    }
+    return Stroke(
+      color: j['c'] as int,
+      width: (j['w'] as num).toDouble(),
+      eraser: j['e'] as bool? ?? false,
+      points: pts,
     );
   }
 }

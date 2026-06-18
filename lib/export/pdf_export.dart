@@ -41,12 +41,39 @@ class PdfExporter {
           pageFormat: format,
           margin: pw.EdgeInsets.zero,
           build: (context) {
+            final pageIndex = doc.pages.indexOf(page);
             return pw.SizedBox(
               width: format.width,
               height: format.height,
               child: pw.Stack(
                 children: [
+                  if (pageIndex == 0 && doc.header.enabled)
+                    _pdfHeader(doc, fonts),
                   for (final e in page.elements) _positioned(e, fonts),
+                  if (page.strokes.isNotEmpty)
+                    pw.Positioned(
+                      left: 0,
+                      top: 0,
+                      child: pw.CustomPaint(
+                        size: PdfPoint(format.width, format.height),
+                        painter: (canvas, size) {
+                          for (final s in page.strokes) {
+                            if (s.points.length < 2) continue;
+                            canvas
+                              ..setStrokeColor(PdfColor.fromInt(s.color))
+                              ..setLineWidth(s.width)
+                              ..moveTo(s.points.first.dx,
+                                  size.y - s.points.first.dy);
+                            for (final p in s.points.skip(1)) {
+                              canvas.lineTo(p.dx, size.y - p.dy);
+                            }
+                            canvas.strokePath();
+                          }
+                        },
+                      ),
+                    ),
+                  if (doc.footer.enabled)
+                    _pdfFooter(doc, fonts, pageIndex + 1, doc.pages.length),
                 ],
               ),
             );
@@ -55,6 +82,59 @@ class PdfExporter {
       );
     }
     return pdf.save();
+  }
+
+  static pw.Widget _pdfHeader(dynamic doc, Map<String, pw.Font> fonts) {
+    final h = doc.header;
+    return pw.Positioned(
+      left: doc.marginLeft,
+      top: doc.marginTop,
+      right: doc.marginRight,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          pw.Center(
+            child: pw.Text(h.school,
+                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+          ),
+          pw.Center(
+            child: pw.Text(h.title,
+                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+          ),
+          pw.SizedBox(height: 3),
+          pw.Text(h.subject, style: const pw.TextStyle(fontSize: 9.5)),
+          pw.Text(h.meta, style: const pw.TextStyle(fontSize: 9.5)),
+          pw.Divider(thickness: 1),
+          if (h.studentGrid)
+            pw.Text('Name: ____________   Roll No: ______   Section: ____',
+                style: const pw.TextStyle(fontSize: 9.5)),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _pdfFooter(
+      dynamic doc, Map<String, pw.Font> fonts, int n, int total) {
+    final f = doc.footer;
+    return pw.Positioned(
+      left: doc.marginLeft,
+      right: doc.marginRight,
+      bottom: (doc.marginBottom - 18).clamp(2, doc.marginBottom).toDouble(),
+      child: pw.Column(
+        children: [
+          pw.Divider(thickness: 0.8),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(f.text, style: const pw.TextStyle(fontSize: 9)),
+              if (f.pageNumber)
+                pw.Text('Page $n of $total',
+                    style: const pw.TextStyle(fontSize: 9)),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   static pw.Widget _positioned(DocElement e, Map<String, pw.Font> fonts) {
@@ -87,6 +167,7 @@ class PdfExporter {
               decoration: e.underline
                   ? pw.TextDecoration.underline
                   : pw.TextDecoration.none,
+              letterSpacing: e.letterSpacing,
               lineSpacing: 1.5,
             ),
           ),
